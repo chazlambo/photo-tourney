@@ -53,6 +53,7 @@ const cards = [...document.querySelectorAll(".half")];
 const undoBtn = $("#undo-btn");
 const finishBtn = $("#finish-btn");
 const fsBtn = $("#fs-btn");
+const resetBtn = $("#reset-btn");
 const stageEl = document.querySelector(".stage");
 const roundInfo = $("#round-info");
 const progressFill = $("#progress-fill");
@@ -416,6 +417,33 @@ function renderResults(ranked) {
   });
 }
 
+// Abandon the current run and return to the start (photos stay loaded).
+function resetToStart() {
+  if (started && !confirm("Start over? Your photos stay loaded, but the current picks will be cleared.")) {
+    return;
+  }
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  }
+  started = false;
+  queue = [];
+  currentMatch = null;
+  history = [];
+  roundNumber = 0;
+  matchesPlayed = 0;
+  photos.forEach((p) => {
+    p.rating = START_RATING;
+    p.games = 0;
+    p.wins = 0;
+    p.losses = 0;
+    p.byes = 0;
+    p.opponents = new Set();
+  });
+  show("upload");
+  renderThumbs();
+  saveState();
+}
+
 // Continue refining from current ratings, adding more rounds.
 function refine() {
   targetRounds += 3;
@@ -534,6 +562,7 @@ clearBtn.addEventListener("click", clearAll);
 undoBtn.addEventListener("click", undo);
 finishBtn.addEventListener("click", finish);
 fsBtn.addEventListener("click", toggleFullscreen);
+resetBtn.addEventListener("click", resetToStart);
 document.addEventListener("fullscreenchange", syncFsBtn);
 document.addEventListener("webkitfullscreenchange", syncFsBtn);
 cards.forEach((card, i) => card.addEventListener("click", () => pick(i)));
