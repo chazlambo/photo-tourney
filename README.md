@@ -17,8 +17,12 @@ server, which also makes it a perfect fit for static hosting like GitHub Pages.
   rating and the loser drops, and each round pairs photos with the **closest ratings
   that haven't met yet** — so every pick is informative and rematches are avoided.
   Continuous ratings mean a (near) tie-free ranking.
-- Tap a photo to pick it (or press <kbd>1</kbd>/<kbd>←</kbd> and <kbd>2</kbd>/<kbd>→</kbd>
-  on desktop). <kbd>Ctrl/Cmd</kbd>+<kbd>Z</kbd> or **Undo** reverts a pick.
+- Comparisons happen on a full-bleed black **stage** — both photos share one seamless
+  canvas (no cards or borders), and hovering one gently dims the other to help you
+  focus. Tap a photo to pick it (or press <kbd>1</kbd>/<kbd>←</kbd> and
+  <kbd>2</kbd>/<kbd>→</kbd> on desktop). <kbd>Ctrl/Cmd</kbd>+<kbd>Z</kbd> or **Undo**
+  reverts a pick. Hit **Fullscreen** (or press <kbd>F</kbd>) to make the images as
+  large as possible.
 - **Finish & rank** ends whenever you like and shows the ranking; **Refine further**
   adds more rounds to sharpen it. Each photo shows its win–loss record, champion in gold.
 

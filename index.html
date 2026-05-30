@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1115" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Photo Tournament</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -46,26 +49,29 @@
 
     <!-- ───────────── Match screen ───────────── -->
     <section id="match" class="screen">
-      <div class="match-bar">
-        <span id="round-info"></span>
-      </div>
-      <div class="progress"><div id="progress-fill" class="progress-fill"></div></div>
-
-      <div class="arena">
-        <div class="card" data-side="0">
-          <img alt="Option 1" />
-          <div class="pick-hint">Tap to pick · <kbd>1</kbd>/<kbd>←</kbd></div>
+      <div class="stage">
+        <div class="topbar">
+          <div class="progress"><div id="progress-fill" class="progress-fill"></div></div>
+          <span id="round-info"></span>
         </div>
-        <div class="vs">VS</div>
-        <div class="card" data-side="1">
-          <img alt="Option 2" />
-          <div class="pick-hint">Tap to pick · <kbd>2</kbd>/<kbd>→</kbd></div>
-        </div>
-      </div>
 
-      <div class="match-actions">
-        <button id="undo-btn" class="btn ghost" disabled>↶ Undo</button>
-        <button id="finish-btn" class="btn primary">Finish &amp; rank →</button>
+        <div class="duel">
+          <button class="half" type="button" data-side="0" aria-label="Pick left photo">
+            <img alt="Option 1" />
+            <span class="half-key">1</span>
+          </button>
+          <div class="divider"></div>
+          <button class="half" type="button" data-side="1" aria-label="Pick right photo">
+            <img alt="Option 2" />
+            <span class="half-key">2</span>
+          </button>
+        </div>
+
+        <div class="controls">
+          <button id="undo-btn" class="pill" disabled>↶ Undo</button>
+          <button id="fs-btn" class="pill" title="Fullscreen (F)">⛶ Fullscreen</button>
+          <button id="finish-btn" class="pill primary">Finish &amp; rank →</button>
+        </div>
       </div>
     </section>
 

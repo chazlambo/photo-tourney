@@ -49,9 +49,11 @@ const estimateEl = $("#estimate");
 const startBtn = $("#start-btn");
 const clearBtn = $("#clear-btn");
 const uploadHint = $("#upload-hint");
-const cards = [...document.querySelectorAll(".card")];
+const cards = [...document.querySelectorAll(".half")];
 const undoBtn = $("#undo-btn");
 const finishBtn = $("#finish-btn");
+const fsBtn = $("#fs-btn");
+const stageEl = document.querySelector(".stage");
 const roundInfo = $("#round-info");
 const progressFill = $("#progress-fill");
 
@@ -464,6 +466,25 @@ function undo() {
   else advance();
 }
 
+// ── fullscreen ──
+const canFullscreen = !!(stageEl.requestFullscreen || stageEl.webkitRequestFullscreen);
+if (!canFullscreen) fsBtn.style.display = "none";
+
+function toggleFullscreen() {
+  if (!canFullscreen) return;
+  const active = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!active) {
+    (stageEl.requestFullscreen || stageEl.webkitRequestFullscreen).call(stageEl);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  }
+}
+
+function syncFsBtn() {
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  fsBtn.textContent = on ? "⤢ Exit" : "⛶ Fullscreen";
+}
+
 // ── utils ──
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
@@ -512,6 +533,9 @@ startBtn.addEventListener("click", startRanking);
 clearBtn.addEventListener("click", clearAll);
 undoBtn.addEventListener("click", undo);
 finishBtn.addEventListener("click", finish);
+fsBtn.addEventListener("click", toggleFullscreen);
+document.addEventListener("fullscreenchange", syncFsBtn);
+document.addEventListener("webkitfullscreenchange", syncFsBtn);
 cards.forEach((card, i) => card.addEventListener("click", () => pick(i)));
 
 $("#refine-btn").addEventListener("click", refine);
@@ -525,6 +549,7 @@ document.addEventListener("keydown", (e) => {
   if (!screens.match.classList.contains("active")) return;
   if (e.key === "1" || e.key === "ArrowLeft") pick(0);
   else if (e.key === "2" || e.key === "ArrowRight") pick(1);
+  else if (e.key.toLowerCase() === "f") toggleFullscreen();
   else if (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     undo();
