@@ -25,5 +25,7 @@ anyone's browser). Share/combine controls only ever appear for shared sets — s
 just ranks their own uploaded photos locally sees no sharing option.
 
 Notes:
-- Folder names become the share id — keep them simple (lowercase, hyphens), no spaces.
+- Folder names become the share id and may contain spaces (e.g. `Charlie Nature Photos`);
+  just avoid slashes. Each ranker enters a name and gets one entry per device, so two
+  different people with the same name don't overwrite each other.
 - `sample/` is a demo set; delete it whenever you like.

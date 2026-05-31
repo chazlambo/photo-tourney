@@ -44,6 +44,21 @@ let currentSet = null;
 let participantName = "";  // name used for shared-set rankings (per device)
 try { participantName = localStorage.getItem("pt-name") || ""; } catch (e) {}
 
+// Stable per-device id: lets two different people with the same name stay
+// separate, while the same device re-ranking just updates its own entry.
+let deviceId = "";
+try {
+  deviceId = localStorage.getItem("pt-device") || "";
+  if (!deviceId) {
+    deviceId = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : "d" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem("pt-device", deviceId);
+  }
+} catch (e) {
+  deviceId = "d" + Math.random().toString(36).slice(2);
+}
+
 // ── elements ──
 const $ = (sel) => document.querySelector(sel);
 const screens = {
@@ -441,10 +456,11 @@ function finish() {
 }
 
 // When you finish ranking a shared set, your ranking is saved automatically:
-// cached locally and (if the owner's token is connected) committed to the repo.
+// cached locally and committed to the repo via the Worker. Keyed by deviceId so
+// same-named people don't collide and re-ranking updates this device's entry.
 function autoAddOwnResult() {
   if (mode !== "set" || !currentSet) return;
-  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length };
+  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId };
   ingestResult(currentSet, entry).catch((e) => {
     alert("Couldn't save your ranking automatically (" + e.message + "). It's kept on this device — try finishing again when you're online.");
   });
@@ -582,6 +598,7 @@ function showSetIntro() {
   $("#set-title").textContent = prettify(currentSet);
   $("#set-meta").textContent = `${photos.length} photos in this set.`;
   if (nameInput) nameInput.value = participantName;
+  syncSetStart();
   updateEstimate();
   syncChips();
   show("set-intro");
@@ -592,8 +609,14 @@ function showSetIntro() {
 // capture the typed name (persisted per device) before a shared-set ranking
 function captureName() {
   const v = (nameInput && nameInput.value || "").trim();
-  participantName = v || participantName || "Me";
-  try { localStorage.setItem("pt-name", participantName); } catch (e) {}
+  participantName = v;                                  // empty => Start stays disabled
+  if (v) { try { localStorage.setItem("pt-name", v); } catch (e) {} }
+  syncSetStart();
+}
+// A name is required to rank a shared set, so the page tracks who ranked it.
+function syncSetStart() {
+  const btn = $("#set-start-btn");
+  if (btn) btn.disabled = !(participantName && participantName.trim());
 }
 
 async function startSetFlow(set) {
@@ -601,6 +624,7 @@ async function startSetFlow(set) {
   currentSet = set;
   $("#set-title").textContent = prettify(set);
   $("#set-meta").innerHTML = '<span class="pulse">Loading set…</span>';
+  { const ss = $("#set-start-btn"); if (ss) ss.disabled = true; } // until name + photos ready
   show("set-intro");
   try {
     const filenames = await fetchSetFilenames(set);
@@ -631,9 +655,13 @@ function loadResults(set) {
 function saveResults(set, arr) {
   try { localStorage.setItem(combineKey(set), JSON.stringify(arr)); } catch (e) {}
 }
+// Identity key: by device when present (so same-named people stay separate and a
+// device updates its own entry), falling back to name for older/device-less files.
+function resultKey(r) { return r.d ? "d:" + r.d : "n:" + String(r.n || "").toLowerCase(); }
 function saveResultLocal(set, entry) {
   const arr = loadResults(set);
-  const i = arr.findIndex((x) => x.n.toLowerCase() === entry.n.toLowerCase());
+  const k = resultKey(entry);
+  const i = arr.findIndex((x) => resultKey(x) === k);
   if (i >= 0) arr[i] = entry; else arr.push(entry);
   saveResults(set, arr);
 }
@@ -645,7 +673,7 @@ async function ingestResult(set, entry) {
   const res = await fetch(WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c }),
+    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c, device: entry.d }),
   });
   if (!res.ok) {
     let msg = "save failed (" + res.status + ")";
@@ -655,8 +683,8 @@ async function ingestResult(set, entry) {
 }
 function mergeResults(primary, secondary) {
   const map = new Map();
-  for (const r of primary) map.set(r.n.toLowerCase(), r);
-  for (const r of secondary) if (!map.has(r.n.toLowerCase())) map.set(r.n.toLowerCase(), r);
+  for (const r of primary) map.set(resultKey(r), r);
+  for (const r of secondary) if (!map.has(resultKey(r))) map.set(resultKey(r), r);
   return [...map.values()];
 }
 
@@ -675,7 +703,7 @@ async function fetchRepoResults(set) {
       const r = await fetch(f.download_url);
       if (!r.ok) return null;
       const d = await r.json();
-      if (d && Array.isArray(d.o)) return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length };
+      if (d && Array.isArray(d.o)) return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length, d: d.d };
     } catch (e) {}
     return null;
   }));
@@ -721,10 +749,13 @@ function populatePersonSelect(results) {
   ph.selected = true;
   ph.textContent = results.length ? "View an individual ranking…" : "No individual rankings yet";
   combinePerson.appendChild(ph);
+  const seen = {};
   results.forEach((r, i) => {
+    const key = String(r.n || "Anonymous").toLowerCase();
+    seen[key] = (seen[key] || 0) + 1;
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = r.n;
+    o.textContent = seen[key] > 1 ? `${r.n} (${seen[key]})` : r.n; // disambiguate same names
     combinePerson.appendChild(o);
   });
   combinePerson.disabled = results.length === 0;
@@ -770,9 +801,10 @@ async function showCombine(set) {
   $("#combine-meta").textContent = n === 0
     ? "No rankings yet — be the first to rank this set."
     : `${n} ranking${n === 1 ? "" : "s"} so far.`;
-  // Whether THIS person has ranked it (never imply a ranking they don't have).
-  $("#combine-you").textContent = mine.length
-    ? `You ranked this as ${mine[mine.length - 1].n}.`
+  // Whether THIS device has ranked it (never imply a ranking they don't have).
+  const myEntry = mine.find((r) => r.d === deviceId) || mine[mine.length - 1];
+  $("#combine-you").textContent = myEntry
+    ? `You ranked this as ${myEntry.n}.`
     : "You haven't ranked this set yet.";
   populatePersonSelect(combineResultsCache);
   renderCombined();
@@ -906,10 +938,10 @@ newBtn.addEventListener("click", () => { clearAll(); goHome(); });
 if (nameInput) {
   nameInput.addEventListener("input", captureName);
   nameInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { captureName(); startRanking(); }
+    if (e.key === "Enter") { captureName(); if (participantName.trim()) startRanking(); }
   });
 }
-$("#set-start-btn").addEventListener("click", () => { captureName(); startRanking(); });
+$("#set-start-btn").addEventListener("click", () => { captureName(); if (participantName.trim()) startRanking(); });
 $("#set-results-btn").addEventListener("click", () => showCombine(currentSet));
 $("#set-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
 

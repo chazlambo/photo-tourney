@@ -2,7 +2,7 @@
  * Photo Tournament — results endpoint (Cloudflare Worker).
  *
  * Receives a finished ranking from the site and commits it to the repo as
- *   results/<set>/<name>.json
+ *   results/<set>/<name>-<deviceId>.json
  * using a GitHub token that lives ONLY here as a server-side secret — it is
  * never sent to any browser. Friends' results save automatically on finish;
  * nobody sends links or clicks anything. You manage results by deleting files
@@ -63,7 +63,10 @@ export default {
     const name = (String(data.name || "Anonymous").trim().slice(0, 40)) || "Anonymous";
     const order = Array.isArray(data.order) ? data.order : null;
     const count = Number(data.count) || (order ? order.length : 0);
-    if (!/^[A-Za-z0-9._-]{1,64}$/.test(set)) return json({ error: "bad set name" }, 400, cors);
+    // Set names may contain spaces (folder names), but never path-traversal.
+    if (!/^[A-Za-z0-9 ._-]{1,64}$/.test(set) || set.includes("..")) {
+      return json({ error: "bad set name" }, 400, cors);
+    }
     if (!order || order.length === 0 || order.length > MAX_PHOTOS) return json({ error: "bad order" }, 400, cors);
     if (!order.every((n) => Number.isInteger(n) && n >= 0 && n < MAX_PHOTOS)) {
       return json({ error: "bad order values" }, 400, cors);
@@ -81,6 +84,10 @@ export default {
     if (new Set(order).size !== order.length) {
       return json({ error: "duplicate order values" }, 400, cors);
     }
+    // Optional per-device id: keeps two same-named people distinct, and lets one
+    // device update its own entry (even across a name change).
+    const device = String(data.device || "").trim();
+    const devTag = /^[A-Za-z0-9-]{6,64}$/.test(device) ? device.slice(0, 24) : "";
 
     const gh = {
       Authorization: "Bearer " + env.GH_TOKEN,
@@ -96,18 +103,36 @@ export default {
     if (setCheck.status === 404) return json({ error: "unknown set" }, 400, cors);
     if (!setCheck.ok && setCheck.status !== 200) return json({ error: "set check failed" }, 502, cors);
 
-    const path = `${RESULTS_DIR}/${set}/${slugForName(name)}.json`;
-    const url = `https://api.github.com/repos/${REPO}/contents/` +
-      path.split("/").map(encodeURIComponent).join("/");
+    const dirUrl = `https://api.github.com/repos/${REPO}/contents/` +
+      `${RESULTS_DIR}/${set}`.split("/").map(encodeURIComponent).join("/");
+    const fileName = `${slugForName(name)}${devTag ? "-" + devTag : ""}.json`;
+    const url = dirUrl + "/" + encodeURIComponent(fileName);
 
-    // Update in place if this name already submitted (need the current sha).
+    // If this device already has an entry under a DIFFERENT name (a name change),
+    // delete the stale file so each device keeps exactly one entry.
+    if (devTag) {
+      const listRes = await fetch(dirUrl, { headers: gh });
+      if (listRes.ok) {
+        const items = await listRes.json();
+        for (const it of (Array.isArray(items) ? items : [])) {
+          if (it.type === "file" && it.name !== fileName && it.name.endsWith("-" + devTag + ".json")) {
+            await fetch(`https://api.github.com/repos/${REPO}/contents/` + it.path.split("/").map(encodeURIComponent).join("/"), {
+              method: "DELETE", headers: gh,
+              body: JSON.stringify({ message: `result: replace prior entry (${name})`, sha: it.sha, branch: "main" }),
+            });
+          }
+        }
+      }
+    }
+
+    // Update in place if this exact file already exists (need the current sha).
     let sha;
     const getRes = await fetch(url, { headers: gh });
     if (getRes.ok) sha = (await getRes.json()).sha;
 
     const body = {
       message: `result: ${name} for ${set}`,
-      content: b64(JSON.stringify({ v: 1, s: set, n: name, c: count, o: order })),
+      content: b64(JSON.stringify({ v: 1, s: set, n: name, c: count, o: order, d: device || undefined })),
       branch: "main",
     };
     if (sha) body.sha = sha;
