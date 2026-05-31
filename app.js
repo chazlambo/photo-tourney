@@ -710,31 +710,41 @@ function renderRankingGrid(container, orderOfCidx, badgeByCidx) {
 }
 
 let combineResultsCache = [];
-function renderCombine(activeIdx) {
-  const results = combineResultsCache;
-  // populate the person selector (scales to many participants, unlike tabs)
-  if (combinePerson.options.length !== results.length + 1) {
-    combinePerson.innerHTML = "";
-    ["Combined ranking", ...results.map((r) => r.n)].forEach((label, i) => {
-      const opt = document.createElement("option");
-      opt.value = String(i);
-      opt.textContent = label;
-      combinePerson.appendChild(opt);
-    });
-  }
-  combinePerson.value = String(activeIdx);
 
+// The combined ranking is its own button; the dropdown holds ONLY individuals
+// (so a participant's name — even "Combined" — can never collide with it).
+function populatePersonSelect(results) {
+  combinePerson.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.disabled = true;
+  ph.selected = true;
+  ph.textContent = results.length ? "View an individual ranking…" : "No individual rankings yet";
+  combinePerson.appendChild(ph);
+  results.forEach((r, i) => {
+    const o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = r.n;
+    combinePerson.appendChild(o);
+  });
+  combinePerson.disabled = results.length === 0;
+}
+function renderCombined() {
   const N = photos.length;
-  if (activeIdx === 0) {
-    const score = bordaScores(results, N);
-    const order = [...Array(N).keys()].sort((a, b) => score[b] - score[a]);
-    const badge = {};
-    order.forEach((c) => (badge[c] = score[c] + " pts"));
-    renderRankingGrid(combineRanking, order, badge);
-  } else {
-    const order = (results[activeIdx - 1].o || []).filter((c) => c < N);
-    renderRankingGrid(combineRanking, order);
-  }
+  const score = bordaScores(combineResultsCache, N);
+  const order = [...Array(N).keys()].sort((a, b) => score[b] - score[a]);
+  const badge = {};
+  order.forEach((c) => (badge[c] = score[c] + " pts"));
+  renderRankingGrid(combineRanking, order, badge);
+  $("#combine-overall-btn").classList.add("active");
+  combinePerson.value = "";
+}
+function renderPerson(i) {
+  const r = combineResultsCache[i];
+  if (!r) return;
+  const N = photos.length;
+  renderRankingGrid(combineRanking, (r.o || []).filter((c) => c < N));
+  $("#combine-overall-btn").classList.remove("active");
 }
 
 async function showCombine(set) {
@@ -754,12 +764,18 @@ async function showCombine(set) {
   }
   let repoResults = [];
   try { repoResults = await fetchRepoResults(set); } catch (e) { /* fall back to local cache */ }
-  combineResultsCache = mergeResults(repoResults, loadResults(set));
+  const mine = loadResults(set); // this device's own submissions for this set
+  combineResultsCache = mergeResults(repoResults, mine);
   const n = combineResultsCache.length;
   $("#combine-meta").textContent = n === 0
-    ? "No rankings yet. Rank it yourself, or open a friend's shared link to add theirs."
-    : `${n} ranking${n === 1 ? "" : "s"}. Showing the combined order; use the dropdown to see an individual ranking.`;
-  renderCombine(0);
+    ? "No rankings yet — be the first to rank this set."
+    : `${n} ranking${n === 1 ? "" : "s"} so far.`;
+  // Whether THIS person has ranked it (never imply a ranking they don't have).
+  $("#combine-you").textContent = mine.length
+    ? `You ranked this as ${mine[mine.length - 1].n}.`
+    : "You haven't ranked this set yet.";
+  populatePersonSelect(combineResultsCache);
+  renderCombined();
 }
 
 // ── browse sets ──
@@ -893,7 +909,10 @@ $("#set-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet
 $("#view-combined-btn").addEventListener("click", () => showCombine(currentSet));
 
 // ── events: combine ──
-combinePerson.addEventListener("change", () => renderCombine(Number(combinePerson.value) || 0));
+$("#combine-overall-btn").addEventListener("click", renderCombined);
+combinePerson.addEventListener("change", () => {
+  if (combinePerson.value !== "") renderPerson(Number(combinePerson.value));
+});
 $("#combine-rank-btn").addEventListener("click", () => startSetFlow(currentSet));
 $("#combine-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
 $("#combine-home-btn").addEventListener("click", goHome);

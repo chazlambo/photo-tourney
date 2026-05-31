@@ -74,7 +74,7 @@
         <button id="set-start-btn" class="btn primary">Start ranking</button>
       </div>
       <div class="results-actions">
-        <button id="set-results-btn" class="btn ghost small">View others' rankings</button>
+        <button id="set-results-btn" class="btn ghost small">See results so far</button>
         <button id="set-copylink-btn" class="btn ghost small">Copy share link</button>
       </div>
     </section>
@@ -141,10 +141,11 @@
       <h2 id="combine-title">Combined results</h2>
       <p id="combine-meta" class="hint"></p>
 
-      <div class="combine-view">
-        <label class="combine-view-label" for="combine-person">Show</label>
-        <select id="combine-person" class="select"></select>
+      <div class="combine-toggle">
+        <button id="combine-overall-btn" type="button" class="seg active">Combined</button>
+        <select id="combine-person" class="select" aria-label="View an individual ranking"></select>
       </div>
+      <p id="combine-you" class="hint"></p>
       <div id="combine-ranking" class="ranking"></div>
 
       <div class="results-actions">
