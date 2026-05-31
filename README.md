@@ -54,12 +54,31 @@ can rank from a link — no backend, no accounts.
 
 The home screen has a **"Rank a shared set →"** button that lists every set in the repo
 to pick from (same as opening `…/?browse`). Finishing a set ranking automatically adds
-your ranking to that set's combined results on your device; **share/combine controls
-only ever appear for shared sets** — someone who just uploads their own photos and ranks
-them locally sees no sharing option at all.
+your ranking to that set's combined results; **share/combine controls only ever appear
+for shared sets** — someone who just uploads their own photos and ranks them locally sees
+no sharing option at all.
 
 Only you can create sets (only you can commit to the repo). See `sets/README.md` for
 details. Note: a shared set's images live in the **public** repo.
+
+### Saving results durably (owner setup, no server)
+
+Rankings are saved as files in the repo at **`results/<set>/<name>.json`** — durable and
+yours to manage. This needs a one-time setup on **your** device:
+
+1. Create a GitHub **fine-grained personal access token** scoped to **only this repo**,
+   with **Repository permissions → Contents: Read and write**.
+2. In the app, open a set's results (or the sets browser) and click **⚙ Owner setup**,
+   then paste the token. It's stored **only in your browser** (localStorage), never in
+   the repo or shared.
+
+After that, when you finish ranking a set — or when you **open a friend's shared link** —
+the app commits their `results/<set>/<name>.json` to the repo for you. Friends never get
+a token, so **only you can write or delete results**; to remove one, delete its file in
+the repo. The Combine view reads these files, so results survive cleared browser data and
+appear on any device. (Each save is a commit, which triggers a Pages rebuild — fine for
+normal use.) Without the token, rankings are cached locally only (and can be lost), and a
+friend still gets a share link to send you.
 
 ## Deploy to GitHub Pages
 
