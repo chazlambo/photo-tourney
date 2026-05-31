@@ -88,6 +88,10 @@ export default {
     // device update its own entry (even across a name change).
     const device = String(data.device || "").trim();
     const devTag = /^[A-Za-z0-9-]{6,64}$/.test(device) ? device.slice(0, 24) : "";
+    // How many matchups (picks) the ranking is based on — used to weight the
+    // combined result toward more-converged rankings.
+    const matchups = (Number.isInteger(data.matchups) && data.matchups >= 0 && data.matchups <= 1000000)
+      ? data.matchups : undefined;
 
     const gh = {
       Authorization: "Bearer " + env.GH_TOKEN,
@@ -132,7 +136,7 @@ export default {
 
     const body = {
       message: `result: ${name} for ${set}`,
-      content: b64(JSON.stringify({ v: 1, s: set, n: name, c: count, o: order, d: device || undefined })),
+      content: b64(JSON.stringify({ v: 1, s: set, n: name, c: count, o: order, d: device || undefined, m: matchups })),
       branch: "main",
     };
     if (sha) body.sha = sha;

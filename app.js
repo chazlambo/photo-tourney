@@ -35,7 +35,7 @@ let history = [];
 let roundNumber = 0;
 let matchesPlayed = 0;
 let lastSubmittedPicks = -1; // guards the exit auto-submit against redundant sends
-let targetRounds = 5;
+let targetRounds = 9;
 let estTotalPicks = 1;
 let nextId = 1;
 let started = false;
@@ -481,7 +481,7 @@ function finish() {
 // same-named people don't collide and re-ranking updates this device's entry.
 function autoAddOwnResult() {
   if (mode !== "set" || !currentSet) return;
-  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId };
+  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId, m: matchesPlayed };
   lastSubmittedPicks = matchesPlayed;
   ingestResult(currentSet, entry).catch((e) => {
     alert("Couldn't save your ranking automatically (" + e.message + "). It's kept on this device — try finishing again when you're online.");
@@ -695,7 +695,7 @@ async function ingestResult(set, entry) {
   const res = await fetch(WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c, device: entry.d }),
+    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c, device: entry.d, matchups: entry.m }),
   });
   if (!res.ok) {
     let msg = "save failed (" + res.status + ")";
@@ -725,21 +725,30 @@ async function fetchRepoResults(set) {
       const r = await fetch(f.download_url);
       if (!r.ok) return null;
       const d = await r.json();
-      if (d && Array.isArray(d.o)) return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length, d: d.d };
+      if (d && Array.isArray(d.o)) return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length, d: d.d, m: d.m };
     } catch (e) {}
     return null;
   }));
   return loaded.filter(Boolean);
 }
 
-// Borda points per photo (cidx): a photo gets (N-1-position) points from each ranking.
+// Weight each ballot by how many matchups (picks) the person made: a ranking
+// built from more comparisons has converged better, so it counts for more.
+function ballotWeights(results) {
+  const ms = results.map((r) => (Number(r.m) > 0 ? Number(r.m) : null));
+  const known = ms.filter((x) => x != null);
+  const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+  return ms.map((x) => (x != null ? x : avg)); // older files w/o a matchup count get the average
+}
+// Weighted Borda: a photo gets weight*(N-1-position) points from each ranking.
 function bordaScores(results, N) {
+  const w = ballotWeights(results);
   const score = new Array(N).fill(0);
-  for (const r of results) {
+  results.forEach((r, idx) => {
     r.o.forEach((cidx, pos) => {
-      if (cidx >= 0 && cidx < N) score[cidx] += (N - 1 - pos);
+      if (cidx >= 0 && cidx < N) score[cidx] += w[idx] * (N - 1 - pos);
     });
-  }
+  });
   return score;
 }
 
@@ -785,9 +794,10 @@ function populatePersonSelect(results) {
 function renderCombined() {
   const N = photos.length;
   const score = bordaScores(combineResultsCache, N);
+  const totalW = ballotWeights(combineResultsCache).reduce((a, b) => a + b, 0) || 1;
   const order = [...Array(N).keys()].sort((a, b) => score[b] - score[a]);
   const badge = {};
-  order.forEach((c) => (badge[c] = score[c] + " pts"));
+  order.forEach((c) => (badge[c] = Math.round(score[c] / totalW) + " pts")); // weighted-avg placement
   renderRankingGrid(combineRanking, order, badge);
   $("#combine-overall-btn").classList.add("active");
   combinePerson.value = "";
@@ -1001,11 +1011,11 @@ function flushPartialOnExit() {
   if (mode !== "set" || !currentSet || !started) return;
   if (currentScreen !== "match") return;          // already submitted on the results screen
   if (matchesPlayed < 1 || matchesPlayed <= lastSubmittedPicks) return;
-  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId };
+  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId, m: matchesPlayed };
   saveResultLocal(currentSet, entry);             // synchronous; keeps this device's copy
   try {
     const body = new Blob(
-      [JSON.stringify({ set: currentSet, name: entry.n, order: entry.o, count: entry.c, device: entry.d })],
+      [JSON.stringify({ set: currentSet, name: entry.n, order: entry.o, count: entry.c, device: entry.d, matchups: entry.m })],
       { type: "text/plain;charset=UTF-8" }
     );
     if (navigator.sendBeacon) navigator.sendBeacon(WORKER_URL, body);
