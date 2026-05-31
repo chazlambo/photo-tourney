@@ -18,8 +18,9 @@ server, which also makes it a perfect fit for static hosting like GitHub Pages.
   that haven't met yet** — so every pick is informative and rematches are avoided.
   Continuous ratings mean a (near) tie-free ranking.
 - Comparisons happen on a full-bleed black **stage** — both photos share one seamless
-  canvas (no cards or borders), and hovering one gently dims the other to help you
-  focus. Tap a photo to pick it (or press <kbd>1</kbd>/<kbd>←</kbd> and
+  canvas (no cards or borders). Selection feedback is purely a frame + a checkmark pop
+  (never any dimming or colour shift), so the photos' true look is never altered while
+  you judge them. Tap a photo to pick it (or press <kbd>1</kbd>/<kbd>←</kbd> and
   <kbd>2</kbd>/<kbd>→</kbd> on desktop). <kbd>Ctrl/Cmd</kbd>+<kbd>Z</kbd> or **Undo**
   reverts a pick. Hit **Fullscreen** (or press <kbd>F</kbd>) to make the images as
   large as possible.
@@ -36,6 +37,22 @@ fussy about local files, serve the folder:
 python -m http.server 8000
 # then visit http://localhost:8000
 ```
+
+## Shared sets (let friends rank the same photos)
+
+Besides ranking your own local photos, you can publish a **shared set** that anyone
+can rank from a link — no backend, no accounts.
+
+1. Drop a folder of images into `sets/`, e.g. `sets/beach-2026/`, and push.
+2. Share `…/?set=beach-2026`. Friends rank it (images load from the repo; filenames are
+   discovered at runtime via the GitHub API — no manifest to maintain).
+3. When a friend finishes they get a **result link** to send back to you.
+4. Open the **Combine** view (the *Results* button, or `…/?set=beach-2026&results`) and
+   paste in each friend's result. You'll see every person's ranking plus a **combined
+   ranking** (Borda count). Results you collect are stored in your browser.
+
+Only you can create sets (only you can commit to the repo). See `sets/README.md` for
+details. Note: a shared set's images live in the **public** repo.
 
 ## Deploy to GitHub Pages
 
@@ -56,9 +73,10 @@ python -m http.server 8000
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Page structure and the three screens (upload / match / results). |
-| `style.css` | Styling (dark theme, responsive). |
-| `app.js` | Tournament logic, uploads, undo, and rendering. |
+| `index.html` | Page structure and screens (upload / set-intro / match / results / browse / combine). |
+| `style.css` | Styling (dark theme, immersive stage, responsive). |
+| `app.js` | Ranking engine, local + shared-set modes, persistence, sharing/combine, rendering. |
+| `sets/` | Shared photo sets (one folder per set) — see `sets/README.md`. |
 
 ## Notes & limits
 

@@ -174,21 +174,54 @@ footer {
   height: auto;
   object-fit: contain;
   display: block;
-  transition: transform .25s ease, filter .25s ease;
+  transition: transform .25s ease;
 }
-/* Apple-style focus: hovering one photo gently dims the other. */
+/* Hover: a thin accent frame + a slight lift. No brightness/colour change to
+   either photo, so looks-based judgements aren't biased. */
 @media (hover: hover) {
-  .duel:hover .half:not(:hover) img { filter: brightness(.4); transform: scale(.985); }
   .half:hover img { transform: scale(1.012); }
+  .half:hover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 2px rgba(91,140,255,.7);
+    pointer-events: none;
+  }
 }
-.half.flash img { transform: scale(1.02); }
+/* Selection: a crisp accent ring + a checkmark that pops + a brief scale pop.
+   Purely framing/iconography — the photo's pixels are never recoloured. */
+.half.flash img { animation: pick-pop .24s ease; }
 .half.flash::after {
   content: "";
   position: absolute;
   inset: 0;
-  box-shadow: inset 0 0 0 3px var(--gold), inset 0 0 70px rgba(255,201,77,.28);
+  box-shadow: inset 0 0 0 4px var(--accent);
   pointer-events: none;
+  animation: ring-pop .2s ease;
 }
+.half.flash::before {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 78px;
+  height: 78px;
+  margin: -39px 0 0 -39px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 42px;
+  color: #fff;
+  background: rgba(91,140,255,.95);
+  border-radius: 50%;
+  box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  pointer-events: none;
+  z-index: 3;
+  animation: check-pop .26s cubic-bezier(.2,.9,.3,1.5);
+}
+@keyframes pick-pop { 0% { transform: scale(1); } 45% { transform: scale(1.025); } 100% { transform: scale(1); } }
+@keyframes ring-pop { from { opacity: 0; } to { opacity: 1; } }
+@keyframes check-pop { 0% { opacity: 0; transform: scale(.4); } 60% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
 .half-key {
   position: absolute;
   top: 14px;

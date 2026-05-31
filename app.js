@@ -115,8 +115,8 @@ function idbReq(request) {
     request.onerror = () => reject(request.error);
   });
 }
-function ostore(name, mode) {
-  return db.transaction(name, mode).objectStore(name);
+function ostore(name, txMode) {
+  return db.transaction(name, txMode).objectStore(name);
 }
 function putBlob(id, name, blob) {
   if (!persistenceReady) return;
@@ -163,6 +163,7 @@ async function restoreSession(key) {
   const rec = await idbReq(ostore("session", "readonly").get(key));
   if (!rec || !rec.photos || rec.photos.length === 0) return false;
 
+  photos.forEach((p) => p.blob && URL.revokeObjectURL(p.url));
   photos = rec.photos
     .map((p) => {
       let blob = null;
@@ -386,7 +387,7 @@ function pick(side) {
   matchesPlayed++;
   cards[side].classList.add("flash");
   currentMatch = null;
-  setTimeout(advance, 130);
+  setTimeout(advance, 240);
 }
 
 function rankedPhotos() {
@@ -459,16 +460,23 @@ function undo() {
   const byId = new Map(photos.map((p) => [p.id, p]));
   for (const s of snap.state) {
     const p = byId.get(s.id);
+    if (!p) continue;
     p.rating = s.rating; p.games = s.games; p.wins = s.wins;
     p.losses = s.losses; p.byes = s.byes; p.opponents = new Set(s.opponents);
   }
-  queue = snap.queue.map((m) => [byId.get(m[0]), byId.get(m[1])]);
-  currentMatch = snap.current ? [byId.get(snap.current[0]), byId.get(snap.current[1])] : null;
+  queue = snap.queue
+    .map((m) => [byId.get(m[0]), byId.get(m[1])])
+    .filter((m) => m[0] && m[1]);
+  currentMatch =
+    snap.current && byId.get(snap.current[0]) && byId.get(snap.current[1])
+      ? [byId.get(snap.current[0]), byId.get(snap.current[1])]
+      : null;
   roundNumber = snap.roundNumber;
   matchesPlayed = snap.matchesPlayed;
   show("match");
   if (currentMatch) renderMatch();
   else advance();
+  saveState();
 }
 
 // ── fullscreen ──
@@ -514,6 +522,7 @@ function setImageUrl(set, fn) {
 }
 
 function loadSetAsPhotos(set, filenames) {
+  photos.forEach((p) => p.blob && URL.revokeObjectURL(p.url));
   photos = filenames.map((fn, idx) => ({
     id: "s" + idx, cidx: idx, name: fn, blob: null, url: setImageUrl(set, fn),
     rating: START_RATING, games: 0, wins: 0, losses: 0, byes: 0, opponents: new Set(),
@@ -555,6 +564,8 @@ function b64urlEncode(str) {
 }
 function b64urlDecode(s) {
   s = s.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = (4 - (s.length % 4)) % 4;
+  s += "=".repeat(pad);
   return decodeURIComponent(escape(atob(s)));
 }
 function buildPayload(name) {
@@ -679,7 +690,7 @@ async function showBrowse() {
     rank.className = "btn primary small";
     rank.textContent = "Rank";
     rank.addEventListener("click", () => {
-      history.pushState({}, "", shareLinkForSet(name));
+      window.history.pushState({}, "", shareLinkForSet(name));
       startSetFlow(name);
     });
     const copy = document.createElement("button");
@@ -718,9 +729,18 @@ async function copyText(text, btn) {
 function goHome() {
   mode = "local";
   currentSet = null;
-  history.replaceState({}, "", PAGE_URL);
+  window.history.replaceState({}, "", PAGE_URL);
   restoreSession("current").then((restored) => {
-    if (!restored) { photos = []; show("upload"); }
+    if (!restored) {
+      photos = [];
+      queue = [];
+      currentMatch = null;
+      history = [];
+      roundNumber = 0;
+      matchesPlayed = 0;
+      started = false;
+      show("upload");
+    }
     renderThumbs();
   });
 }
@@ -778,9 +798,9 @@ $("#set-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet
 
 // ── events: sharing a result ──
 $("#share-result-btn").addEventListener("click", () => {
-  const name = (prompt("Your name (so the owner knows whose ranking this is):", "") || "").trim();
-  if (name === null) return;
-  const payload = buildPayload(name || "Anonymous");
+  const raw = prompt("Your name (so the owner knows whose ranking this is):", "");
+  if (raw === null) return;
+  const payload = buildPayload(raw.trim() || "Anonymous");
   shareLinkEl.value = resultLink(payload);
   shareBox.hidden = false;
   shareBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -793,7 +813,9 @@ $("#email-link-btn").addEventListener("click", () => {
   location.href = `mailto:${OWNER_EMAIL}?subject=${subject}&body=${body}`;
 });
 $("#add-mine-btn").addEventListener("click", () => {
-  const name = (prompt("Save your ranking under what name?", "Me") || "").trim();
+  const raw = prompt("Save your ranking under what name?", "Me");
+  if (raw === null) return;
+  const name = raw.trim();
   if (!name) return;
   addResultPayload(buildPayload(name));
   showCombine(currentSet);
@@ -851,7 +873,7 @@ async function init() {
   try {
     if (params.has("import")) {
       const set = addResultPayload(params.get("import"));
-      history.replaceState({}, "", shareLinkForSet(set) + "&results");
+      window.history.replaceState({}, "", shareLinkForSet(set) + "&results");
       await showCombine(set);
     } else if (params.has("set")) {
       currentSet = params.get("set");
