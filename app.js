@@ -34,6 +34,7 @@ let currentMatch = null;
 let history = [];
 let roundNumber = 0;
 let matchesPlayed = 0;
+let lastSubmittedPicks = -1; // guards the exit auto-submit against redundant sends
 let targetRounds = 5;
 let estTotalPicks = 1;
 let nextId = 1;
@@ -393,6 +394,7 @@ function buildRound() {
 function startRanking() {
   roundNumber = 0;
   matchesPlayed = 0;
+  lastSubmittedPicks = -1;
   history = [];
   started = true;
   photos.forEach((p) => {
@@ -480,6 +482,7 @@ function finish() {
 function autoAddOwnResult() {
   if (mode !== "set" || !currentSet) return;
   const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId };
+  lastSubmittedPicks = matchesPlayed;
   ingestResult(currentSet, entry).catch((e) => {
     alert("Couldn't save your ranking automatically (" + e.message + "). It's kept on this device — try finishing again when you're online.");
   });
@@ -509,7 +512,7 @@ function resetToStart() {
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   }
   started = false; queue = []; currentMatch = null; history = [];
-  roundNumber = 0; matchesPlayed = 0;
+  roundNumber = 0; matchesPlayed = 0; lastSubmittedPicks = -1;
   photos.forEach((p) => {
     p.rating = START_RATING; p.games = 0; p.wins = 0; p.losses = 0; p.byes = 0; p.opponents = new Set();
   });
@@ -988,6 +991,29 @@ document.addEventListener("keydown", (e) => {
   else if (e.key.toLowerCase() === "f") toggleFullscreen();
   else if (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
 });
+
+// ── events: auto-submit on exit ──
+// If someone leaves mid-ranking (closes the tab, backgrounds the app), send their
+// in-progress ranking so their effort still counts. sendBeacon is the reliable
+// transport on unload; text/plain avoids a CORS preflight (the Worker reads the
+// body as JSON regardless). Debounced so we only send when there's new progress.
+function flushPartialOnExit() {
+  if (mode !== "set" || !currentSet || !started) return;
+  if (currentScreen !== "match") return;          // already submitted on the results screen
+  if (matchesPlayed < 1 || matchesPlayed <= lastSubmittedPicks) return;
+  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId };
+  saveResultLocal(currentSet, entry);             // synchronous; keeps this device's copy
+  try {
+    const body = new Blob(
+      [JSON.stringify({ set: currentSet, name: entry.n, order: entry.o, count: entry.c, device: entry.d })],
+      { type: "text/plain;charset=UTF-8" }
+    );
+    if (navigator.sendBeacon) navigator.sendBeacon(WORKER_URL, body);
+  } catch (e) {}
+  lastSubmittedPicks = matchesPlayed;
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushPartialOnExit(); });
+window.addEventListener("pagehide", flushPartialOnExit);
 
 // ── init / router ──
 async function init() {
