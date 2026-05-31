@@ -849,13 +849,13 @@ function renderPerson(i) {
   const st = Array.isArray(r.st) ? r.st : null; // [wins, losses, Elo] per cidx, if saved
   order.forEach((cidx, pos) => {
     badge[cidx] = (st && st[cidx] && typeof st[cidx][2] === "number")
-      ? st[cidx][2] + " Elo"
-      : (order.length - pos) + " pts";
+      ? `${st[cidx][2]} · ${st[cidx][0]}–${st[cidx][1]}`   // Elo · wins–losses
+      : (order.length - pos) + " pts";        // older results: placement points
   });
   renderRankingGrid(combineRanking, order, badge);
   $("#combine-overall-btn").classList.remove("active");
-  $("#combine-meta").textContent = r.n + " — " +
-    (Number(r.m) > 0 ? `made ${r.m} comparisons` : `ranked all ${order.length} photos`);
+  const detail = Number(r.m) > 0 ? `${r.m} matchups` : `${order.length} photos`;
+  $("#combine-meta").textContent = `${r.n} — ${detail}` + (st ? " · each photo: Elo · W–L" : "");
 }
 
 async function showCombine(set) {
