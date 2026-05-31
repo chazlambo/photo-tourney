@@ -19,8 +19,10 @@ const MAX_PHOTOS = 256;
 const START_RATING = 1000;
 const K = 32;
 const REPO = "chazlambo/photo-tourney";
-const OWNER_EMAIL = "charlie.lambert@gmail.com";
 const RESULTS_DIR = "results"; // shared-set rankings are committed as results/<set>/<name>.json
+// Auto-save endpoint (Cloudflare Worker) that commits results to the repo. The
+// write token lives only in the Worker, never in the browser.
+const WORKER_URL = "https://photo-tourney-results-worker.charlie-lambert.workers.dev/";
 
 const PAGE_URL = location.origin + location.pathname;        // for clean links
 const PAGE_DIR = PAGE_URL.replace(/[^/]*$/, "");             // directory of the page
@@ -73,8 +75,6 @@ const roundInfo = $("#round-info");
 const progressFill = $("#progress-fill");
 const setResultActions = $("#set-result-actions");
 const newBtn = $("#new-btn");
-const shareBox = $("#share-box");
-const shareLinkEl = $("#share-link");
 const combinePerson = $("#combine-person");
 const combineRanking = $("#combine-ranking");
 const nameInput = $("#participant-name");
@@ -435,7 +435,6 @@ function finish() {
   const isSet = mode === "set";
   setResultActions.hidden = !isSet;
   newBtn.hidden = isSet;
-  shareBox.hidden = true;
   if (isSet) autoAddOwnResult();
   show("results");
   saveState();
@@ -447,7 +446,7 @@ function autoAddOwnResult() {
   if (mode !== "set" || !currentSet) return;
   const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length };
   ingestResult(currentSet, entry).catch((e) => {
-    if (getToken()) alert("Couldn't save your ranking to the repo (" + e.message + "). It's saved on this device.");
+    alert("Couldn't save your ranking automatically (" + e.message + "). It's kept on this device — try finishing again when you're online.");
   });
 }
 
@@ -616,25 +615,9 @@ async function startSetFlow(set) {
   }
 }
 
-// ── result encoding ──
-function b64urlEncode(str) {
-  return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function b64urlDecode(s) {
-  s = s.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = (4 - (s.length % 4)) % 4;
-  s += "=".repeat(pad);
-  return decodeURIComponent(escape(atob(s)));
-}
-function buildPayload(name) {
-  const order = rankedPhotos().map((p) => p.cidx);
-  return b64urlEncode(JSON.stringify({ v: 1, s: currentSet, n: name || "Anonymous", c: photos.length, o: order }));
-}
+// ── share link (invite people to rank a set) ──
 function shareLinkForSet(set) {
   return PAGE_URL + "?set=" + encodeURIComponent(set);
-}
-function resultLink(payload) {
-  return PAGE_URL + "?import=" + payload;
 }
 
 // ── combine storage ──
@@ -654,16 +637,21 @@ function saveResultLocal(set, entry) {
   if (i >= 0) arr[i] = entry; else arr.push(entry);
   saveResults(set, arr);
 }
-function decodePayload(payload) {
-  const d = JSON.parse(b64urlDecode(payload));
-  if (!d || !d.s || !Array.isArray(d.o)) throw new Error("invalid result code");
-  return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length, s: d.s };
-}
-// Save a ranking: always cache locally; if the owner's token is set, also commit
-// it to the repo as results/<set>/<name>.json (durable, owner-only).
+// Save a ranking: cache locally for instant display, and POST to the Worker,
+// which commits it to the repo as results/<set>/<name>.json. No secret lives in
+// the browser — this is what makes every finish auto-save with no further action.
 async function ingestResult(set, entry) {
   saveResultLocal(set, entry);
-  if (getToken()) await ghPutResult(set, entry);
+  const res = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c }),
+  });
+  if (!res.ok) {
+    let msg = "save failed (" + res.status + ")";
+    try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
 }
 function mergeResults(primary, secondary) {
   const map = new Map();
@@ -672,44 +660,12 @@ function mergeResults(primary, secondary) {
   return [...map.values()];
 }
 
-// ── GitHub-backed result files (owner token, no server) ──
-function getToken() { try { return localStorage.getItem("pt-gh-token") || ""; } catch (e) { return ""; } }
-function setToken(t) {
-  try { if (t) localStorage.setItem("pt-gh-token", t); else localStorage.removeItem("pt-gh-token"); } catch (e) {}
-}
-function b64encode(str) { return btoa(unescape(encodeURIComponent(str))); }
+// ── reading result files from the repo (public; no auth needed) ──
 function ghContentsUrl(path) {
   return `https://api.github.com/repos/${REPO}/contents/` + path.split("/").map(encodeURIComponent).join("/");
 }
-function slugForName(name) {
-  const base = String(name || "anon").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "anon";
-  let h = 0;
-  const s = String(name || "");
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return base.slice(0, 32) + "-" + h.toString(16).slice(0, 6);
-}
-async function ghPutResult(set, entry) {
-  const token = getToken();
-  if (!token) throw new Error("no token");
-  const url = ghContentsUrl(`${RESULTS_DIR}/${set}/${slugForName(entry.n)}.json`);
-  const headers = { Authorization: "Bearer " + token, Accept: "application/vnd.github+json" };
-  let sha;
-  const getRes = await fetch(url, { headers });
-  if (getRes.ok) sha = (await getRes.json()).sha;
-  const body = {
-    message: `result: ${entry.n} for ${set}`,
-    content: b64encode(JSON.stringify({ v: 1, s: set, n: entry.n, c: entry.c, o: entry.o })),
-    branch: "main",
-  };
-  if (sha) body.sha = sha;
-  const res = await fetch(url, { method: "PUT", headers, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error("GitHub save failed (" + res.status + ")");
-}
 async function fetchRepoResults(set) {
-  const token = getToken();
-  const headers = { Accept: "application/vnd.github+json" };
-  if (token) headers.Authorization = "Bearer " + token;
-  const res = await fetch(ghContentsUrl(`${RESULTS_DIR}/${set}`), { headers });
+  const res = await fetch(ghContentsUrl(`${RESULTS_DIR}/${set}`), { headers: { Accept: "application/vnd.github+json" } });
   if (res.status === 404) return [];
   if (!res.ok) throw new Error("Couldn't read results from the repo.");
   const items = await res.json();
@@ -724,18 +680,6 @@ async function fetchRepoResults(set) {
     return null;
   }));
   return loaded.filter(Boolean);
-}
-// Owner-only: connect/replace/clear the GitHub token (stored only in this browser).
-function ownerSetup() {
-  const has = !!getToken();
-  const msg = has
-    ? "A GitHub token is connected — your device saves results into the repo.\n\nPaste a new token to replace it, or leave blank to DISCONNECT (results then save locally only)."
-    : `Paste a GitHub fine-grained token with "Contents: Read and write" on ${REPO}.\n\nIt is stored only in this browser and lets your device save each ranking as a file in the repo (results/<set>/). Leave blank to cancel.`;
-  const t = prompt(msg, "");
-  if (t === null) return;
-  if (t.trim() === "") { if (has) { setToken(""); alert("Disconnected. Results now save locally only."); } return; }
-  setToken(t.trim());
-  alert("Connected. New rankings will be saved into the repo under results/.");
 }
 
 // Borda points per photo (cidx): a photo gets (N-1-position) points from each ranking.
@@ -945,18 +889,7 @@ $("#set-start-btn").addEventListener("click", () => { captureName(); startRankin
 $("#set-results-btn").addEventListener("click", () => showCombine(currentSet));
 $("#set-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
 
-// ── events: sharing a result ──
-$("#share-result-btn").addEventListener("click", () => {
-  shareLinkEl.value = resultLink(buildPayload(participantName || "Me"));
-  shareBox.hidden = false;
-  shareBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
-});
-$("#copy-link-btn").addEventListener("click", (e) => copyText(shareLinkEl.value, e.target));
-$("#email-link-btn").addEventListener("click", () => {
-  const subject = encodeURIComponent(`My ranking for "${prettify(currentSet)}"`);
-  const body = encodeURIComponent(`Here's my ranking — open this link to add it:\n\n${shareLinkEl.value}`);
-  location.href = `mailto:${OWNER_EMAIL}?subject=${subject}&body=${body}`;
-});
+// ── events: results (shared set) ──
 $("#view-combined-btn").addEventListener("click", () => showCombine(currentSet));
 
 // ── events: combine ──
@@ -968,9 +901,6 @@ $("#combine-home-btn").addEventListener("click", goHome);
 // ── events: browse (sets browser — "Rank a shared set" on home, or the ?browse URL) ──
 $("#browse-btn").addEventListener("click", showBrowse);
 $("#sets-home-btn").addEventListener("click", goHome);
-
-// ── events: owner setup (connect/clear GitHub token) ──
-document.querySelectorAll(".owner-setup").forEach((b) => b.addEventListener("click", ownerSetup));
 
 // ── events: keyboard ──
 document.addEventListener("keydown", (e) => {
@@ -992,13 +922,7 @@ async function init() {
 
   const params = new URLSearchParams(location.search);
   try {
-    if (params.has("import")) {
-      const entry = decodePayload(params.get("import"));
-      try { await ingestResult(entry.s, entry); }
-      catch (e) { alert("Added locally, but couldn't write it to the repo: " + e.message); }
-      window.history.replaceState({}, "", shareLinkForSet(entry.s) + "&results");
-      await showCombine(entry.s);
-    } else if (params.has("set")) {
+    if (params.has("set")) {
       currentSet = params.get("set");
       mode = "set";
       if (params.has("results")) {

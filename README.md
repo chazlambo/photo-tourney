@@ -41,44 +41,36 @@ python -m http.server 8000
 ## Shared sets (let friends rank the same photos)
 
 Besides ranking your own local photos, you can publish a **shared set** that anyone
-can rank from a link — no backend, no accounts.
+can rank from a link, with results saved automatically.
 
 1. Drop a folder of images into `sets/`, e.g. `sets/beach-2026/`, and push.
-2. Share `…/?set=beach-2026`. Friends rank it (images load from the repo; filenames are
-   discovered at runtime via the GitHub API — no manifest to maintain).
-3. When a friend finishes they get a **result link** to send back to you.
-4. Open the **Combine** view (the *Results* button on the set screen, or
-   `…/?set=beach-2026&results`) and paste in each friend's result. You'll see every
-   person's ranking plus a **combined ranking** (Borda count). Results you collect are
-   stored in your browser.
+2. Share `…/?set=beach-2026`. Each person opens it, enters their name, and ranks it
+   (images load from the repo; filenames are discovered at runtime via the GitHub API —
+   no manifest to maintain).
+3. **When anyone finishes, their ranking is saved automatically** as
+   `results/beach-2026/<name>.json` in the repo — nobody sends or pastes anything.
+4. Open the **Combine** view (the *View combined results* button, or
+   `…/?set=beach-2026&results`) to see every person's ranking (pick a name from the
+   dropdown) plus the **combined ranking** (Borda count).
 
 The home screen has a **"Rank a shared set →"** button that lists every set in the repo
-to pick from (same as opening `…/?browse`). Finishing a set ranking automatically adds
-your ranking to that set's combined results; **share/combine controls only ever appear
-for shared sets** — someone who just uploads their own photos and ranks them locally sees
-no sharing option at all.
+to pick from (same as `…/?browse`). **Share/combine controls only ever appear for shared
+sets** — someone who just uploads their own photos and ranks them locally sees no sharing
+option at all. Only you can create sets (only you can commit to the repo). Note: a shared
+set's images **and results** live in the **public** repo.
 
-Only you can create sets (only you can commit to the repo). See `sets/README.md` for
-details. Note: a shared set's images live in the **public** repo.
+### How auto-save works (the Cloudflare Worker)
 
-### Saving results durably (owner setup, no server)
+A static site can't write to its own repo, so a tiny **Cloudflare Worker** holds the
+GitHub write token as a server-side secret and commits each finished ranking for you.
+Set it up once — see **`worker/README.md`** — then point `WORKER_URL` in `app.js` at it.
 
-Rankings are saved as files in the repo at **`results/<set>/<name>.json`** — durable and
-yours to manage. This needs a one-time setup on **your** device:
-
-1. Create a GitHub **fine-grained personal access token** scoped to **only this repo**,
-   with **Repository permissions → Contents: Read and write**.
-2. In the app, open a set's results (or the sets browser) and click **⚙ Owner setup**,
-   then paste the token. It's stored **only in your browser** (localStorage), never in
-   the repo or shared.
-
-After that, when you finish ranking a set — or when you **open a friend's shared link** —
-the app commits their `results/<set>/<name>.json` to the repo for you. Friends never get
-a token, so **only you can write or delete results**; to remove one, delete its file in
-the repo. The Combine view reads these files, so results survive cleared browser data and
-appear on any device. (Each save is a commit, which triggers a Pages rebuild — fine for
-normal use.) Without the token, rankings are cached locally only (and can be lost), and a
-friend still gets a share link to send you.
+- Finishing a ranking POSTs `{set, name, ranking}` to the Worker, which writes
+  `results/<set>/<name>.json`. The token is **never** in any browser.
+- **Only the Worker can write; only you can delete** — remove a result by deleting its
+  file in `results/<set>/`. Re-submitting the same name updates that person's file.
+- The Combine view reads these files, so results are durable and show on any device.
+- Each save is one commit (a normal Pages rebuild) — fine for typical use.
 
 ## Deploy to GitHub Pages
 
