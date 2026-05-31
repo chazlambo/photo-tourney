@@ -28,14 +28,16 @@
         <input id="file-input" type="file" accept="image/*" multiple hidden />
       </label>
 
+      <button id="browse-btn" class="browse-cta" type="button">Or rank a shared set →</button>
+
       <div id="thumbs" class="thumbs"></div>
 
       <div id="setup" class="setup" hidden>
-        <p class="setup-label">How thorough should the ranking be?</p>
+        <p class="setup-label">How thorough? More rounds = finer ranking, but more picks.</p>
         <div class="chips" id="chips">
-          <button class="chip" data-rounds="3">Quick</button>
-          <button class="chip active" data-rounds="5">Balanced</button>
-          <button class="chip" data-rounds="8">Thorough</button>
+          <button class="chip" data-rounds="3">Quick (3 rounds)</button>
+          <button class="chip active" data-rounds="5">Balanced (5 rounds)</button>
+          <button class="chip" data-rounds="8">Thorough (8 rounds)</button>
         </div>
         <p id="estimate" class="estimate"></p>
       </div>
@@ -45,8 +47,6 @@
         <button id="start-btn" class="btn primary" disabled>Start ranking</button>
       </div>
       <p id="upload-hint" class="hint">Add at least 2 photos to begin.</p>
-
-      <p class="nav-row"><button id="browse-btn" class="btn ghost small">Rank a shared set →</button></p>
     </section>
 
     <!-- ───────────── Set intro (shared mode) ───────────── -->
@@ -55,17 +55,17 @@
       <p id="set-meta" class="hint"></p>
 
       <div class="setup">
-        <p class="setup-label">Your name (so your ranking is labelled in the results)</p>
+        <p class="setup-label">Your name (shows next to your ranking when results are combined)</p>
         <input id="participant-name" class="name-input" type="text" maxlength="40"
-          placeholder="e.g. Charlie" autocomplete="name" />
+          placeholder="e.g. Charlie" autocomplete="name" autofocus />
       </div>
 
       <div class="setup">
-        <p class="setup-label">How thorough should your ranking be?</p>
+        <p class="setup-label">How thorough? More rounds = finer ranking, but more picks.</p>
         <div class="chips" id="chips-set">
-          <button class="chip" data-rounds="3">Quick</button>
-          <button class="chip active" data-rounds="5">Balanced</button>
-          <button class="chip" data-rounds="8">Thorough</button>
+          <button class="chip" data-rounds="3">Quick (3 rounds)</button>
+          <button class="chip active" data-rounds="5">Balanced (5 rounds)</button>
+          <button class="chip" data-rounds="8">Thorough (8 rounds)</button>
         </div>
         <p id="estimate-set" class="estimate"></p>
       </div>
@@ -74,7 +74,7 @@
         <button id="set-start-btn" class="btn primary">Start ranking</button>
       </div>
       <div class="results-actions">
-        <button id="set-results-btn" class="btn ghost small">View combined results</button>
+        <button id="set-results-btn" class="btn ghost small">View others' rankings</button>
         <button id="set-copylink-btn" class="btn ghost small">Copy share link</button>
       </div>
     </section>
@@ -103,7 +103,7 @@
         <div class="controls">
           <button id="undo-btn" class="pill" disabled>↶ Undo</button>
           <button id="fs-btn" class="pill" title="Fullscreen (F)">⛶ Fullscreen</button>
-          <button id="finish-btn" class="pill primary">Finish &amp; rank →</button>
+          <button id="finish-btn" class="pill primary">See results →</button>
         </div>
       </div>
     </section>
@@ -115,9 +115,9 @@
       <div id="ranking" class="ranking"></div>
 
       <div class="results-actions">
-        <button id="refine-btn" class="btn primary">Refine further</button>
-        <button id="rematch-btn" class="btn ghost">Restart</button>
-        <button id="new-btn" class="btn ghost">New set</button>
+        <button id="refine-btn" class="btn primary">Continue ranking (+3 rounds)</button>
+        <button id="rematch-btn" class="btn ghost">Restart (same photos)</button>
+        <button id="new-btn" class="btn ghost">New photos</button>
       </div>
 
       <!-- shared-set extras (shown only when ranking a shared set) -->
@@ -126,11 +126,10 @@
         <button id="view-combined-btn" class="btn ghost">View combined results</button>
       </div>
       <div id="share-box" class="share-box" hidden>
-        <p class="hint">Send this link to whoever owns the set so your ranking counts:</p>
+        <p class="hint">Send this link to the set owner so your ranking is added to the combined results.</p>
         <textarea id="share-link" class="code-box" readonly rows="3"></textarea>
         <div class="results-actions">
           <button id="copy-link-btn" class="btn primary small">Copy link</button>
-          <button id="copy-code-btn" class="btn ghost small">Copy code only</button>
           <button id="email-link-btn" class="btn ghost small">Email it</button>
         </div>
       </div>

@@ -387,8 +387,12 @@ function advance() {
 
 function renderMatch() {
   const [a, b] = currentMatch;
-  cards[0].querySelector("img").src = a.url;
-  cards[1].querySelector("img").src = b.url;
+  const imgA = cards[0].querySelector("img");
+  const imgB = cards[1].querySelector("img");
+  imgA.src = a.url; imgA.alt = a.name;
+  imgB.src = b.url; imgB.alt = b.name;
+  cards[0].setAttribute("aria-label", "Pick left photo: " + a.name);
+  cards[1].setAttribute("aria-label", "Pick right photo: " + b.name);
   cards.forEach((c) => c.classList.remove("flash"));
   roundInfo.textContent = `Round ${roundNumber}/${targetRounds} · pick ${matchesPlayed + 1} of ~${estTotalPicks}`;
   progressFill.style.width = Math.min(99, (matchesPlayed / estTotalPicks) * 100) + "%";
@@ -437,8 +441,11 @@ function autoAddOwnResult() {
 }
 
 function renderResults(ranked) {
-  $("#results-sub").textContent =
-    `Based on ${matchesPlayed} pick${matchesPlayed === 1 ? "" : "s"} across ${roundNumber} round${roundNumber === 1 ? "" : "s"}.`;
+  const picks = `Based on ${matchesPlayed} pick${matchesPlayed === 1 ? "" : "s"} across ${roundNumber} round${roundNumber === 1 ? "" : "s"}.`;
+  const ctx = mode === "set"
+    ? `Your ranking for “${prettify(currentSet)}” as ${participantName || "Me"}. `
+    : "Your personal ranking. ";
+  $("#results-sub").textContent = ctx + picks;
   const wrap = $("#ranking");
   wrap.innerHTML = "";
   ranked.forEach((p, i) => {
@@ -568,6 +575,7 @@ function showSetIntro() {
   updateEstimate();
   syncChips();
   show("set-intro");
+  if (nameInput && !participantName) nameInput.focus();
   saveState();
 }
 
@@ -582,7 +590,7 @@ async function startSetFlow(set) {
   mode = "set";
   currentSet = set;
   $("#set-title").textContent = prettify(set);
-  $("#set-meta").textContent = "Loading set…";
+  $("#set-meta").innerHTML = '<span class="pulse">Loading set…</span>';
   show("set-intro");
   try {
     const filenames = await fetchSetFilenames(set);
@@ -616,11 +624,6 @@ function shareLinkForSet(set) {
 }
 function resultLink(payload) {
   return PAGE_URL + "?import=" + payload;
-}
-function extractPayload(input) {
-  const s = input.trim();
-  const m = s.match(/[?&]import=([^&\s]+)/);
-  return m ? m[1] : s;
 }
 
 // ── combine storage ──
@@ -698,7 +701,7 @@ async function showCombine(set) {
   mode = "set";
   currentSet = set;
   $("#combine-title").textContent = prettify(set);
-  $("#combine-meta").textContent = "Loading set…";
+  $("#combine-meta").innerHTML = '<span class="pulse">Loading set…</span>';
   combineTabs.innerHTML = "";
   combineRanking.innerHTML = "";
   show("combine");
@@ -721,12 +724,12 @@ async function showCombine(set) {
 async function showBrowse() {
   show("sets");
   const list = $("#sets-list");
-  list.innerHTML = `<p class="hint">Loading…</p>`;
+  list.innerHTML = `<p class="empty-state pulse">Loading sets…</p>`;
   let sets;
   try { sets = await listSets(); }
-  catch (e) { list.innerHTML = `<p class="hint">${escapeHtml(e.message)}</p>`; return; }
+  catch (e) { list.innerHTML = `<p class="empty-state">${escapeHtml(e.message)}</p>`; return; }
   if (sets.length === 0) {
-    list.innerHTML = `<p class="hint">No sets yet. Paste a folder of images into <code>sets/</code> in the repo, then push.</p>`;
+    list.innerHTML = `<p class="empty-state">No sets yet. Paste a folder of images into <code>sets/</code> in the repo, then push.</p>`;
     return;
   }
   list.innerHTML = "";
@@ -851,7 +854,6 @@ $("#share-result-btn").addEventListener("click", () => {
   shareBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
 });
 $("#copy-link-btn").addEventListener("click", (e) => copyText(shareLinkEl.value, e.target));
-$("#copy-code-btn").addEventListener("click", (e) => copyText(extractPayload(shareLinkEl.value), e.target));
 $("#email-link-btn").addEventListener("click", () => {
   const subject = encodeURIComponent(`My ranking for "${prettify(currentSet)}"`);
   const body = encodeURIComponent(`Here's my ranking — open this link to add it:\n\n${shareLinkEl.value}`);
