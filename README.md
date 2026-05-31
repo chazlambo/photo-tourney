@@ -47,9 +47,15 @@ can rank from a link — no backend, no accounts.
 2. Share `…/?set=beach-2026`. Friends rank it (images load from the repo; filenames are
    discovered at runtime via the GitHub API — no manifest to maintain).
 3. When a friend finishes they get a **result link** to send back to you.
-4. Open the **Combine** view (the *Results* button, or `…/?set=beach-2026&results`) and
-   paste in each friend's result. You'll see every person's ranking plus a **combined
-   ranking** (Borda count). Results you collect are stored in your browser.
+4. Open the **Combine** view (the *Results* button on the set screen, or
+   `…/?set=beach-2026&results`) and paste in each friend's result. You'll see every
+   person's ranking plus a **combined ranking** (Borda count). Results you collect are
+   stored in your browser.
+
+The shared-sets UI (browser, share, and combine) is **only reachable via URLs** —
+`?set=…`, `?import=…`, `?set=…&results`, and `?browse`. The normal local upload flow
+has no link to it, so a regular visitor who just ranks their own photos never sees any
+sharing option. To see the list of all sets in the repo, open `…/?browse`.
 
 Only you can create sets (only you can commit to the repo). See `sets/README.md` for
 details. Note: a shared set's images live in the **public** repo.

@@ -377,7 +377,6 @@ footer {
 
 /* ── shared sets / combine ── */
 #set-intro h2, #combine h2, #sets h2 { text-align: center; margin-bottom: 4px; }
-.nav-row { text-align: center; margin-top: 22px; }
 
 .sets-list { display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
 .set-row {

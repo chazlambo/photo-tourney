@@ -847,8 +847,7 @@ $("#combine-clear-btn").addEventListener("click", () => {
 });
 $("#combine-home-btn").addEventListener("click", goHome);
 
-// ── events: browse ──
-$("#browse-btn").addEventListener("click", showBrowse);
+// ── events: browse (sets browser reachable only via the ?browse URL, owner-only) ──
 $("#sets-home-btn").addEventListener("click", goHome);
 
 // ── events: keyboard ──
