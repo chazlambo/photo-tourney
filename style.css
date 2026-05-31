@@ -441,25 +441,20 @@ footer {
 .set-row .set-name { font-weight: 600; flex: 1; min-width: 140px; }
 .set-row .set-count { color: var(--muted); font-size: .85rem; }
 
-.tabs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 14px 0 4px; }
-.tab {
-  border: 1px solid var(--border);
+.combine-view { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 14px 0 4px; }
+.combine-view-label { color: var(--muted); font-size: .9rem; }
+.select {
   background: var(--panel-2);
   color: var(--text);
-  padding: 10px 16px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: .9rem;
+  padding: 10px 16px;
+  font-size: .92rem;
   min-height: 44px;
   cursor: pointer;
-  transition: background .15s ease, box-shadow .15s ease, transform .06s ease;
+  max-width: 70%;
 }
-.tab:active { transform: scale(.97); }
-.tab.active {
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  font-weight: 600;
-  box-shadow: 0 0 0 2px rgba(91,140,255,.45);
-}
+.select:focus { outline: none; border-color: var(--accent); }
 
 .code-box {
   width: 100%;

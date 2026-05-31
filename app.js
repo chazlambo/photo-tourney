@@ -74,7 +74,7 @@ const setResultActions = $("#set-result-actions");
 const newBtn = $("#new-btn");
 const shareBox = $("#share-box");
 const shareLinkEl = $("#share-link");
-const combineTabs = $("#combine-tabs");
+const combinePerson = $("#combine-person");
 const combineRanking = $("#combine-ranking");
 const nameInput = $("#participant-name");
 
@@ -320,6 +320,14 @@ function applyResult(winner, loser) {
   winner.opponents.add(loser.id);
   loser.opponents.add(winner.id);
 }
+// Pairing cost: prefer close Elo, strongly penalise a rematch. Minimising the
+// total of this over the round gives close-rated matchups while avoiding repeats
+// whenever the set is large enough to allow it.
+const REMATCH_PENALTY = 1e6;
+function pairCost(a, b) {
+  return Math.abs(a.rating - b.rating) + (a.opponents.has(b.id) ? REMATCH_PENALTY : 0);
+}
+
 function buildRound() {
   queue = [];
   let pool = [...photos];
@@ -330,31 +338,35 @@ function buildRound() {
   }
   pool = roundNumber === 0 ? shuffle(pool) : pool.sort((a, b) => b.rating - a.rating || Math.random() - 0.5);
 
-  // Best-fit pairing: for each photo pick the closest-rated opponent it hasn't
-  // faced yet; only fall back to a rematch when no fresh opponent remains.
+  // Seed: pair each photo (high rating first) with its lowest-cost partner.
   const pairs = [];
   const rest = [...pool];
   while (rest.length >= 2) {
     const a = rest.shift();
     let bestIdx = 0, bestCost = Infinity;
     for (let k = 0; k < rest.length; k++) {
-      const b = rest[k];
-      const cost = (a.opponents.has(b.id) ? 1e9 : 0) + Math.abs(a.rating - b.rating);
-      if (cost < bestCost) { bestCost = cost; bestIdx = k; }
+      const c = pairCost(a, rest[k]);
+      if (c < bestCost) { bestCost = c; bestIdx = k; }
     }
     pairs.push([a, rest.splice(bestIdx, 1)[0]]);
   }
 
-  // Repair pass: break any remaining rematch by swapping partners with another
-  // pair, when a single swap makes both pairs rematch-free.
-  for (let i = 0; i < pairs.length; i++) {
-    const [a, b] = pairs[i];
-    if (!a.opponents.has(b.id)) continue;
-    for (let j = 0; j < pairs.length; j++) {
-      if (j === i) continue;
-      const [c, d] = pairs[j];
-      if (!a.opponents.has(d.id) && !c.opponents.has(b.id)) { pairs[i] = [a, d]; pairs[j] = [c, b]; break; }
-      if (!a.opponents.has(c.id) && !d.opponents.has(b.id)) { pairs[i] = [a, c]; pairs[j] = [d, b]; break; }
+  // 2-opt local search: swap partners between any two pairs whenever it lowers
+  // the total cost. This both removes avoidable rematches and tightens Elo
+  // closeness (a far-apart pairing gets swapped for two closer ones).
+  let improved = true, guard = 0;
+  while (improved && guard++ < 16) {
+    improved = false;
+    for (let i = 0; i < pairs.length; i++) {
+      for (let j = i + 1; j < pairs.length; j++) {
+        const [a, b] = pairs[i];
+        const [c, d] = pairs[j];
+        const cur = pairCost(a, b) + pairCost(c, d);
+        const s1 = pairCost(a, c) + pairCost(b, d);
+        const s2 = pairCost(a, d) + pairCost(c, b);
+        if (s1 < cur && s1 <= s2) { pairs[i] = [a, c]; pairs[j] = [b, d]; improved = true; }
+        else if (s2 < cur) { pairs[i] = [a, d]; pairs[j] = [c, b]; improved = true; }
+      }
     }
   }
 
@@ -675,15 +687,18 @@ function renderRankingGrid(container, orderOfCidx, badgeByCidx) {
 let combineResultsCache = [];
 function renderCombine(activeIdx) {
   const results = combineResultsCache;
-  combineTabs.innerHTML = "";
-  const labels = ["Combined", ...results.map((r) => r.n)];
-  labels.forEach((label, i) => {
-    const tab = document.createElement("button");
-    tab.className = "tab" + (i === activeIdx ? " active" : "");
-    tab.textContent = label;
-    tab.addEventListener("click", () => renderCombine(i));
-    combineTabs.appendChild(tab);
-  });
+  // populate the person selector (scales to many participants, unlike tabs)
+  if (combinePerson.options.length !== results.length + 1) {
+    combinePerson.innerHTML = "";
+    ["Combined ranking", ...results.map((r) => r.n)].forEach((label, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = label;
+      combinePerson.appendChild(opt);
+    });
+  }
+  combinePerson.value = String(activeIdx);
+
   const N = photos.length;
   if (activeIdx === 0) {
     const score = bordaScores(results, N);
@@ -702,7 +717,7 @@ async function showCombine(set) {
   currentSet = set;
   $("#combine-title").textContent = prettify(set);
   $("#combine-meta").innerHTML = '<span class="pulse">Loading set…</span>';
-  combineTabs.innerHTML = "";
+  combinePerson.innerHTML = "";
   combineRanking.innerHTML = "";
   show("combine");
   try {
@@ -862,15 +877,9 @@ $("#email-link-btn").addEventListener("click", () => {
 $("#view-combined-btn").addEventListener("click", () => showCombine(currentSet));
 
 // ── events: combine ──
+combinePerson.addEventListener("change", () => renderCombine(Number(combinePerson.value) || 0));
 $("#combine-rank-btn").addEventListener("click", () => startSetFlow(currentSet));
 $("#combine-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
-$("#combine-clear-btn").addEventListener("click", () => {
-  if (!confirm("Delete all collected results for this set? (Only clears them on this device.)")) return;
-  saveResults(currentSet, []);
-  combineResultsCache = [];
-  renderCombine(0);
-  $("#combine-meta").textContent = "No results yet — paste a friend's result below, or rank it yourself.";
-});
 $("#combine-home-btn").addEventListener("click", goHome);
 
 // ── events: browse (sets browser — "Rank a shared set" on home, or the ?browse URL) ──
