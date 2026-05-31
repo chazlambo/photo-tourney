@@ -32,6 +32,7 @@ let photos = [];          // {id,cidx,name,blob,url, rating,games,wins,losses,by
 let queue = [];
 let currentMatch = null;
 let history = [];
+let matchLog = [];        // every matchup this session: [winnerCidx, loserCidx]
 let roundNumber = 0;
 let matchesPlayed = 0;
 let lastSubmittedPicks = -1; // guards the exit auto-submit against redundant sends
@@ -163,6 +164,7 @@ function saveState() {
       targetRounds,
       roundNumber,
       matchesPlayed,
+      matchLog,
       photos: photos.map((p) => ({
         id: p.id, cidx: p.cidx, name: p.name,
         url: p.blob ? undefined : p.url,
@@ -212,6 +214,7 @@ async function restoreSession(key) {
   matchesPlayed = rec.matchesPlayed || 0;
   started = !!rec.started;
   history = [];
+  matchLog = rec.matchLog || [];
 
   const byId = new Map(photos.map((p) => [p.id, p]));
   queue = (rec.queue || [])
@@ -396,6 +399,7 @@ function startRanking() {
   matchesPlayed = 0;
   lastSubmittedPicks = -1;
   history = [];
+  matchLog = [];
   started = true;
   photos.forEach((p) => {
     p.rating = START_RATING; p.games = 0; p.wins = 0; p.losses = 0; p.byes = 0; p.opponents = new Set();
@@ -455,6 +459,7 @@ function pick(side) {
   const winner = currentMatch[side];
   const loser = currentMatch[side === 0 ? 1 : 0];
   applyResult(winner, loser);
+  matchLog.push([winner.cidx, loser.cidx]);
   matchesPlayed++;
   cards[side].classList.add("flash");
   currentMatch = null;
@@ -476,12 +481,30 @@ function finish() {
   saveState();
 }
 
+// Build the result for the current ranking: ranked order, per-photo records+Elo
+// (st[cidx] = [wins, losses, rating]), and the full matchup log (mt) — the rich
+// data used to build a better combined list.
+function currentResultEntry() {
+  const ranked = rankedPhotos();
+  const st = new Array(photos.length);
+  photos.forEach((p) => { if (p.cidx != null) st[p.cidx] = [p.wins, p.losses, Math.round(p.rating)]; });
+  return {
+    n: participantName || "Me",
+    o: ranked.map((p) => p.cidx),
+    c: photos.length,
+    d: deviceId,
+    m: matchesPlayed,
+    st,
+    mt: matchLog.slice(),
+  };
+}
+
 // When you finish ranking a shared set, your ranking is saved automatically:
 // cached locally and committed to the repo via the Worker. Keyed by deviceId so
 // same-named people don't collide and re-ranking updates this device's entry.
 function autoAddOwnResult() {
   if (mode !== "set" || !currentSet) return;
-  const entry = { n: participantName || "Me", o: rankedPhotos().map((p) => p.cidx), c: photos.length, d: deviceId, m: matchesPlayed };
+  const entry = currentResultEntry();
   lastSubmittedPicks = matchesPlayed;
   ingestResult(currentSet, entry).catch((e) => {
     alert("Couldn't save your ranking automatically (" + e.message + "). It's kept on this device — try finishing again when you're online.");
@@ -511,7 +534,7 @@ function resetToStart() {
   if (document.fullscreenElement || document.webkitFullscreenElement) {
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   }
-  started = false; queue = []; currentMatch = null; history = [];
+  started = false; queue = []; currentMatch = null; history = []; matchLog = [];
   roundNumber = 0; matchesPlayed = 0; lastSubmittedPicks = -1;
   photos.forEach((p) => {
     p.rating = START_RATING; p.games = 0; p.wins = 0; p.losses = 0; p.byes = 0; p.opponents = new Set();
@@ -543,6 +566,7 @@ function snapshot() {
 function undo() {
   const snap = history.pop();
   if (!snap) return;
+  matchLog.pop();
   const byId = new Map(photos.map((p) => [p.id, p]));
   for (const s of snap.state) {
     const p = byId.get(s.id);
@@ -695,7 +719,7 @@ async function ingestResult(set, entry) {
   const res = await fetch(WORKER_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c, device: entry.d, matchups: entry.m }),
+    body: JSON.stringify({ set, name: entry.n, order: entry.o, count: entry.c, device: entry.d, matchups: entry.m, st: entry.st, mt: entry.mt }),
   });
   if (!res.ok) {
     let msg = "save failed (" + res.status + ")";
@@ -725,7 +749,7 @@ async function fetchRepoResults(set) {
       const r = await fetch(f.download_url);
       if (!r.ok) return null;
       const d = await r.json();
-      if (d && Array.isArray(d.o)) return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length, d: d.d, m: d.m };
+      if (d && Array.isArray(d.o)) return { n: d.n || "Anonymous", o: d.o, c: d.c || d.o.length, d: d.d, m: d.m, st: d.st, mt: d.mt };
     } catch (e) {}
     return null;
   }));
@@ -791,20 +815,29 @@ function populatePersonSelect(results) {
   });
   combinePerson.disabled = results.length === 0;
 }
+// A ranking counts toward the combined result only if it's for the current set
+// and reflects at least 6 rounds (rounds ≈ 2·picks ÷ photos). Legacy results
+// without a recorded matchup count are still included.
+function countsTowardCombined(r, N) {
+  if (r.c !== N) return false;
+  if (r.m == null) return true;
+  return r.m >= 3 * N;
+}
 function renderCombined() {
   const N = photos.length;
-  const score = bordaScores(combineResultsCache, N);
-  const totalW = ballotWeights(combineResultsCache).reduce((a, b) => a + b, 0) || 1;
+  const counting = combineResultsCache.filter((r) => countsTowardCombined(r, N));
+  const score = bordaScores(counting, N);
+  const totalW = ballotWeights(counting).reduce((a, b) => a + b, 0) || 1;
   const order = [...Array(N).keys()].sort((a, b) => score[b] - score[a]);
   const badge = {};
   order.forEach((c) => (badge[c] = Math.round(score[c] / totalW) + " pts")); // weighted-avg placement
   renderRankingGrid(combineRanking, order, badge);
   $("#combine-overall-btn").classList.add("active");
   combinePerson.value = "";
-  const nn = combineResultsCache.length;
-  $("#combine-meta").textContent = nn === 0
+  const tot = combineResultsCache.length, cnt = counting.length;
+  $("#combine-meta").textContent = tot === 0
     ? "No rankings yet — be the first to rank this set."
-    : `${nn} ranking${nn === 1 ? "" : "s"} so far.`;
+    : `${cnt} of ${tot} ranking${tot === 1 ? "" : "s"} counted (need ≥6 rounds).`;
 }
 function renderPerson(i) {
   const r = combineResultsCache[i];
@@ -813,7 +846,12 @@ function renderPerson(i) {
   // each photo's placement points in this person's ranking (top = most points)
   const order = (r.o || []).filter((c) => c >= 0 && c < N);
   const badge = {};
-  order.forEach((cidx, pos) => (badge[cidx] = (order.length - pos) + " pts"));
+  const st = Array.isArray(r.st) ? r.st : null; // [wins, losses, Elo] per cidx, if saved
+  order.forEach((cidx, pos) => {
+    badge[cidx] = (st && st[cidx] && typeof st[cidx][2] === "number")
+      ? st[cidx][2] + " Elo"
+      : (order.length - pos) + " pts";
+  });
   renderRankingGrid(combineRanking, order, badge);
   $("#combine-overall-btn").classList.remove("active");
   $("#combine-meta").textContent = r.n + " — " +

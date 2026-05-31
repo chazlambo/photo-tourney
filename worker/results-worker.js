@@ -92,6 +92,13 @@ export default {
     // combined result toward more-converged rankings.
     const matchups = (Number.isInteger(data.matchups) && data.matchups >= 0 && data.matchups <= 1000000)
       ? data.matchups : undefined;
+    // Optional rich data: per-photo records [wins,losses,elo] (st, indexed by cidx)
+    // and the full matchup log [[winnerCidx,loserCidx],...] (mt). Stored if valid.
+    let st = Array.isArray(data.st) ? data.st : null;
+    if (st && (st.length !== count || !st.every((e) => Array.isArray(e) && e.length === 3 && e.every((x) => Number.isFinite(x))))) st = null;
+    let mt = Array.isArray(data.mt) ? data.mt : null;
+    if (mt && (mt.length > 100000 || !mt.every((e) => Array.isArray(e) && e.length === 2 &&
+      Number.isInteger(e[0]) && Number.isInteger(e[1]) && e[0] >= 0 && e[0] < count && e[1] >= 0 && e[1] < count))) mt = null;
 
     const gh = {
       Authorization: "Bearer " + env.GH_TOKEN,
@@ -106,6 +113,15 @@ export default {
     );
     if (setCheck.status === 404) return json({ error: "unknown set" }, 400, cors);
     if (!setCheck.ok && setCheck.status !== 200) return json({ error: "set check failed" }, 502, cors);
+    // Reject submissions whose photo count doesn't match the set's current size
+    // (stops stale/resumed sessions ranking a since-changed set from polluting results).
+    const setItems = await setCheck.json();
+    const setSize = Array.isArray(setItems)
+      ? setItems.filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name)).length
+      : 0;
+    if (setSize && count !== setSize) {
+      return json({ error: "set changed; please reload", expected: setSize, got: count }, 409, cors);
+    }
 
     const dirUrl = `https://api.github.com/repos/${REPO}/contents/` +
       `${RESULTS_DIR}/${set}`.split("/").map(encodeURIComponent).join("/");
@@ -136,7 +152,7 @@ export default {
 
     const body = {
       message: `result: ${name} for ${set}`,
-      content: b64(JSON.stringify({ v: 1, s: set, n: name, c: count, o: order, d: device || undefined, m: matchups })),
+      content: b64(JSON.stringify({ v: 2, s: set, n: name, c: count, o: order, d: device || undefined, m: matchups, st: st || undefined, mt: mt || undefined })),
       branch: "main",
     };
     if (sha) body.sha = sha;
