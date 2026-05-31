@@ -1060,8 +1060,14 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "1" || e.key === "ArrowLeft") pick(0);
   else if (e.key === "2" || e.key === "ArrowRight") pick(1);
   else if (e.key.toLowerCase() === "f") toggleFullscreen();
-  else if (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); }
+  else if (e.key === "Backspace" || e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
 });
+
+// On desktop, advertise the keyboard shortcuts in the match top bar.
+if (window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  const kbHint = $("#kb-hint");
+  if (kbHint) kbHint.textContent = "←/→ or 1/2 to pick · Z to undo · F for fullscreen";
+}
 
 // ── events: auto-submit on exit ──
 // If someone leaves mid-ranking (closes the tab, backgrounds the app), send their
