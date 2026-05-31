@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#36d1dc"/><stop offset="1" stop-color="#1a5276"/>
+  </linearGradient></defs>
+  <rect width="800" height="600" fill="url(#g)"/>
+  <path d="M0 420 Q200 380 400 420 T800 420 V600 H0 Z" fill="#0e3a5c" opacity="0.6"/>
+  <text x="400" y="80" font-family="sans-serif" font-size="48" font-weight="700"
+    fill="#fff" text-anchor="middle">Ocean</text>
+</svg>

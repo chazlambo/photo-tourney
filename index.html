@@ -17,7 +17,7 @@
   </header>
 
   <main>
-    <!-- ───────────── Upload screen ───────────── -->
+    <!-- ───────────── Upload screen (local mode) ───────────── -->
     <section id="upload" class="screen active">
       <label id="dropzone" for="file-input">
         <div class="dropzone-inner">
@@ -45,6 +45,32 @@
         <button id="start-btn" class="btn primary" disabled>Start ranking</button>
       </div>
       <p id="upload-hint" class="hint">Add at least 2 photos to begin.</p>
+
+      <p class="nav-row"><button id="browse-btn" class="btn ghost small">Shared sets ▸</button></p>
+    </section>
+
+    <!-- ───────────── Set intro (shared mode) ───────────── -->
+    <section id="set-intro" class="screen">
+      <h2 id="set-title">Photo set</h2>
+      <p id="set-meta" class="hint"></p>
+
+      <div class="setup">
+        <p class="setup-label">How thorough should your ranking be?</p>
+        <div class="chips" id="chips-set">
+          <button class="chip" data-rounds="3">Quick</button>
+          <button class="chip active" data-rounds="5">Balanced</button>
+          <button class="chip" data-rounds="8">Thorough</button>
+        </div>
+        <p id="estimate-set" class="estimate"></p>
+      </div>
+
+      <div class="upload-actions">
+        <button id="set-start-btn" class="btn primary">Start ranking</button>
+      </div>
+      <div class="results-actions">
+        <button id="set-results-btn" class="btn ghost small">View combined results</button>
+        <button id="set-copylink-btn" class="btn ghost small">Copy share link</button>
+      </div>
     </section>
 
     <!-- ───────────── Match screen ───────────── -->
@@ -81,16 +107,66 @@
       <h2>🏆 Final Ranking</h2>
       <p id="results-sub" class="hint"></p>
       <div id="ranking" class="ranking"></div>
+
       <div class="results-actions">
         <button id="refine-btn" class="btn primary">Refine further</button>
-        <button id="rematch-btn" class="btn ghost">Restart (same photos)</button>
+        <button id="rematch-btn" class="btn ghost">Restart</button>
         <button id="new-btn" class="btn ghost">New set</button>
+      </div>
+
+      <!-- shared-set extras (shown only when ranking a shared set) -->
+      <div id="set-result-actions" class="results-actions" hidden>
+        <button id="share-result-btn" class="btn primary">Share my result</button>
+        <button id="add-mine-btn" class="btn ghost">Add to combined results</button>
+        <button id="view-combined-btn" class="btn ghost">View combined results</button>
+      </div>
+      <div id="share-box" class="share-box" hidden>
+        <p class="hint">Send this link to whoever owns the set so your ranking counts:</p>
+        <textarea id="share-link" class="code-box" readonly rows="3"></textarea>
+        <div class="results-actions">
+          <button id="copy-link-btn" class="btn primary small">Copy link</button>
+          <button id="copy-code-btn" class="btn ghost small">Copy code only</button>
+          <button id="email-link-btn" class="btn ghost small">Email it</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Shared sets browser ───────────── -->
+    <section id="sets" class="screen">
+      <h2>Shared photo sets</h2>
+      <p class="hint">Each set is a folder of images in the repo. Share a link to let friends rank one.</p>
+      <div id="sets-list" class="sets-list"></div>
+      <div class="results-actions">
+        <button id="sets-home-btn" class="btn ghost">← Home</button>
+      </div>
+    </section>
+
+    <!-- ───────────── Combined results ───────────── -->
+    <section id="combine" class="screen">
+      <h2 id="combine-title">Combined results</h2>
+      <p id="combine-meta" class="hint"></p>
+
+      <div id="combine-tabs" class="tabs"></div>
+      <div id="combine-ranking" class="ranking"></div>
+
+      <div class="setup">
+        <p class="setup-label">Add a friend's result</p>
+        <textarea id="import-box" class="code-box" rows="3"
+          placeholder="Paste a friend's result code or link here…"></textarea>
+        <div class="results-actions">
+          <button id="import-btn" class="btn primary small">Add result</button>
+          <button id="combine-rank-btn" class="btn ghost small">Rank this set myself</button>
+          <button id="combine-copylink-btn" class="btn ghost small">Copy share link</button>
+          <button id="combine-clear-btn" class="btn ghost small">Clear all</button>
+          <button id="combine-home-btn" class="btn ghost small">← Home</button>
+        </div>
+        <p id="import-msg" class="hint"></p>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Everything runs locally in your browser — no photos are uploaded anywhere.</p>
+    <p id="footer-note">Photos you upload here stay in your browser. Shared sets live in the public repo.</p>
   </footer>
 
   <script src="app.js"></script>
