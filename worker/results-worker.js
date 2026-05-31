@@ -68,6 +68,19 @@ export default {
     if (!order.every((n) => Number.isInteger(n) && n >= 0 && n < MAX_PHOTOS)) {
       return json({ error: "bad order values" }, 400, cors);
     }
+    // count must be sane and consistent with the order (no oversized count that
+    // would make the combine view allocate a huge Borda array, and no indices
+    // outside the ranked range).
+    if (!Number.isInteger(count) || count < 2 || count > MAX_PHOTOS) {
+      return json({ error: "bad count" }, 400, cors);
+    }
+    if (!order.every((n) => n < count)) {
+      return json({ error: "order index out of range" }, 400, cors);
+    }
+    // No duplicate indices (a valid ranking lists each photo at most once).
+    if (new Set(order).size !== order.length) {
+      return json({ error: "duplicate order values" }, 400, cors);
+    }
 
     const gh = {
       Authorization: "Bearer " + env.GH_TOKEN,
@@ -99,7 +112,14 @@ export default {
     };
     if (sha) body.sha = sha;
 
-    const put = await fetch(url, { method: "PUT", headers: gh, body: JSON.stringify(body) });
+    let put = await fetch(url, { method: "PUT", headers: gh, body: JSON.stringify(body) });
+    // A 409 means the file's sha changed between our GET and PUT (a concurrent
+    // submission under the same name). Re-read the current sha and try once more.
+    if (put.status === 409) {
+      const reGet = await fetch(url, { headers: gh });
+      if (reGet.ok) body.sha = (await reGet.json()).sha;
+      put = await fetch(url, { method: "PUT", headers: gh, body: JSON.stringify(body) });
+    }
     if (!put.ok) return json({ error: "github write failed", status: put.status }, 502, cors);
 
     return json({ ok: true }, 200, cors);

@@ -687,7 +687,7 @@ function bordaScores(results, N) {
   const score = new Array(N).fill(0);
   for (const r of results) {
     r.o.forEach((cidx, pos) => {
-      if (cidx < N) score[cidx] += (N - 1 - pos);
+      if (cidx >= 0 && cidx < N) score[cidx] += (N - 1 - pos);
     });
   }
   return score;
@@ -901,6 +901,14 @@ $("#rematch-btn").addEventListener("click", startRanking);
 newBtn.addEventListener("click", () => { clearAll(); goHome(); });
 
 // ── events: set intro ──
+// Capture the typed name live so it survives a page refresh, navigation, or
+// pressing Enter (the input has no submit handler) before "Start ranking".
+if (nameInput) {
+  nameInput.addEventListener("input", captureName);
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { captureName(); startRanking(); }
+  });
+}
 $("#set-start-btn").addEventListener("click", () => { captureName(); startRanking(); });
 $("#set-results-btn").addEventListener("click", () => showCombine(currentSet));
 $("#set-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
