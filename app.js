@@ -476,9 +476,21 @@ function finish() {
   const isSet = mode === "set";
   setResultActions.hidden = !isSet;
   newBtn.hidden = isSet;
+  // If the ranking isn't finished yet (you hit "See results" early), offer Resume.
+  // Only offer "+3 rounds" once every round is actually complete.
+  const incomplete = !!currentMatch || queue.length > 0 || roundNumber < targetRounds;
+  $("#resume-btn").hidden = !incomplete;
+  $("#refine-btn").hidden = incomplete;
   if (isSet) autoAddOwnResult();
   show("results");
   saveState();
+}
+
+// Return to ranking exactly where you left off, without adding rounds.
+function resume() {
+  show("match");
+  if (currentMatch) renderMatch();
+  else advance();
 }
 
 // Build the result for the current ranking: ranked order, per-photo records+Elo
@@ -1008,6 +1020,7 @@ document.addEventListener("webkitfullscreenchange", syncFsBtn);
 cards.forEach((card, i) => card.addEventListener("click", () => pick(i)));
 
 // ── events: results ──
+$("#resume-btn").addEventListener("click", resume);
 $("#refine-btn").addEventListener("click", refine);
 $("#rematch-btn").addEventListener("click", startRanking);
 newBtn.addEventListener("click", () => { clearAll(); goHome(); });
