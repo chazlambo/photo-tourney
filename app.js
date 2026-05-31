@@ -38,6 +38,8 @@ let started = false;
 let currentScreen = "upload";
 let mode = "local";       // 'local' | 'set'
 let currentSet = null;
+let participantName = "";  // name used for shared-set rankings (per device)
+try { participantName = localStorage.getItem("pt-name") || ""; } catch (e) {}
 
 // ── elements ──
 const $ = (sel) => document.querySelector(sel);
@@ -74,7 +76,7 @@ const shareBox = $("#share-box");
 const shareLinkEl = $("#share-link");
 const combineTabs = $("#combine-tabs");
 const combineRanking = $("#combine-ranking");
-const importMsg = $("#import-msg");
+const nameInput = $("#participant-name");
 
 function show(name) {
   currentScreen = name;
@@ -322,25 +324,41 @@ function buildRound() {
   queue = [];
   let pool = [...photos];
   if (pool.length % 2 === 1) {
-    pool.sort((a, b) => b.games - a.games || Math.random() - 0.5);
+    // odd one out gets a bye; give it to whoever has played most (and fewest byes)
+    pool.sort((a, b) => b.games - a.games || a.byes - b.byes || Math.random() - 0.5);
     pool.shift().byes++;
   }
   pool = roundNumber === 0 ? shuffle(pool) : pool.sort((a, b) => b.rating - a.rating || Math.random() - 0.5);
-  const used = new Set();
-  for (let i = 0; i < pool.length; i++) {
-    const a = pool[i];
-    if (used.has(a.id)) continue;
-    let partner = null, fallback = null;
-    for (let j = i + 1; j < pool.length; j++) {
-      const b = pool[j];
-      if (used.has(b.id)) continue;
-      if (fallback === null) fallback = b;
-      if (!a.opponents.has(b.id)) { partner = b; break; }
+
+  // Best-fit pairing: for each photo pick the closest-rated opponent it hasn't
+  // faced yet; only fall back to a rematch when no fresh opponent remains.
+  const pairs = [];
+  const rest = [...pool];
+  while (rest.length >= 2) {
+    const a = rest.shift();
+    let bestIdx = 0, bestCost = Infinity;
+    for (let k = 0; k < rest.length; k++) {
+      const b = rest[k];
+      const cost = (a.opponents.has(b.id) ? 1e9 : 0) + Math.abs(a.rating - b.rating);
+      if (cost < bestCost) { bestCost = cost; bestIdx = k; }
     }
-    const b = partner || fallback;
-    if (b) { used.add(a.id); used.add(b.id); queue.push([a, b]); }
+    pairs.push([a, rest.splice(bestIdx, 1)[0]]);
   }
-  queue = shuffle(queue);
+
+  // Repair pass: break any remaining rematch by swapping partners with another
+  // pair, when a single swap makes both pairs rematch-free.
+  for (let i = 0; i < pairs.length; i++) {
+    const [a, b] = pairs[i];
+    if (!a.opponents.has(b.id)) continue;
+    for (let j = 0; j < pairs.length; j++) {
+      if (j === i) continue;
+      const [c, d] = pairs[j];
+      if (!a.opponents.has(d.id) && !c.opponents.has(b.id)) { pairs[i] = [a, d]; pairs[j] = [c, b]; break; }
+      if (!a.opponents.has(c.id) && !d.opponents.has(b.id)) { pairs[i] = [a, c]; pairs[j] = [d, b]; break; }
+    }
+  }
+
+  queue = shuffle(pairs);
   roundNumber++;
 }
 
@@ -410,9 +428,10 @@ function finish() {
 // that set's combined results (stored on this device as "You").
 function autoAddOwnResult() {
   if (mode !== "set" || !currentSet) return;
-  const entry = { n: "You", o: rankedPhotos().map((p) => p.cidx), c: photos.length };
+  const name = participantName || "Me";
+  const entry = { n: name, o: rankedPhotos().map((p) => p.cidx), c: photos.length };
   const arr = loadResults(currentSet);
-  const i = arr.findIndex((x) => x.n.toLowerCase() === "you");
+  const i = arr.findIndex((x) => x.n.toLowerCase() === name.toLowerCase());
   if (i >= 0) arr[i] = entry; else arr.push(entry);
   saveResults(currentSet, arr);
 }
@@ -427,7 +446,7 @@ function renderResults(ranked) {
     item.className = "rank-item" + (i === 0 ? " winner" : "");
     item.innerHTML = `<span class="rank-badge">${i === 0 ? "🏆 #1" : "#" + (i + 1)}</span>
       <img src="${p.url}" alt="${escapeHtml(p.name)}" />
-      <span class="rank-record">${p.wins}–${p.losses}</span>`;
+      <span class="rank-record" title="Elo rating · win–loss">${Math.round(p.rating)} · ${p.wins}–${p.losses}</span>`;
     wrap.appendChild(item);
   });
 }
@@ -545,10 +564,18 @@ function loadSetAsPhotos(set, filenames) {
 function showSetIntro() {
   $("#set-title").textContent = prettify(currentSet);
   $("#set-meta").textContent = `${photos.length} photos in this set.`;
+  if (nameInput) nameInput.value = participantName;
   updateEstimate();
   syncChips();
   show("set-intro");
   saveState();
+}
+
+// capture the typed name (persisted per device) before a shared-set ranking
+function captureName() {
+  const v = (nameInput && nameInput.value || "").trim();
+  participantName = v || participantName || "Me";
+  try { localStorage.setItem("pt-name", participantName); } catch (e) {}
 }
 
 async function startSetFlow(set) {
@@ -615,25 +642,29 @@ function addResultPayload(payload) {
   return data.s;
 }
 
-function computeCombined(results, N) {
+// Borda points per photo (cidx): a photo gets (N-1-position) points from each ranking.
+function bordaScores(results, N) {
   const score = new Array(N).fill(0);
   for (const r of results) {
     r.o.forEach((cidx, pos) => {
       if (cidx < N) score[cidx] += (N - 1 - pos);
     });
   }
-  return [...Array(N).keys()].sort((a, b) => score[b] - score[a]);
+  return score;
 }
 
-function renderRankingGrid(container, orderOfCidx) {
+// badgeByCidx (optional): map of cidx -> short text shown in the corner badge.
+function renderRankingGrid(container, orderOfCidx, badgeByCidx) {
   container.innerHTML = "";
   orderOfCidx.forEach((cidx, i) => {
     const p = photos[cidx];
     if (!p) return;
     const item = document.createElement("div");
     item.className = "rank-item" + (i === 0 ? " winner" : "");
+    const badge = badgeByCidx && cidx in badgeByCidx
+      ? `<span class="rank-record">${badgeByCidx[cidx]}</span>` : "";
     item.innerHTML = `<span class="rank-badge">${i === 0 ? "🏆 #1" : "#" + (i + 1)}</span>
-      <img src="${p.url}" alt="${escapeHtml(p.name)}" />`;
+      <img src="${p.url}" alt="${escapeHtml(p.name)}" />${badge}`;
     container.appendChild(item);
   });
 }
@@ -651,10 +682,16 @@ function renderCombine(activeIdx) {
     combineTabs.appendChild(tab);
   });
   const N = photos.length;
-  const order = activeIdx === 0
-    ? computeCombined(results, N)
-    : (results[activeIdx - 1].o || []).filter((c) => c < N);
-  renderRankingGrid(combineRanking, order);
+  if (activeIdx === 0) {
+    const score = bordaScores(results, N);
+    const order = [...Array(N).keys()].sort((a, b) => score[b] - score[a]);
+    const badge = {};
+    order.forEach((c) => (badge[c] = score[c] + " pts"));
+    renderRankingGrid(combineRanking, order, badge);
+  } else {
+    const order = (results[activeIdx - 1].o || []).filter((c) => c < N);
+    renderRankingGrid(combineRanking, order);
+  }
 }
 
 async function showCombine(set) {
@@ -664,7 +701,6 @@ async function showCombine(set) {
   $("#combine-meta").textContent = "Loading set…";
   combineTabs.innerHTML = "";
   combineRanking.innerHTML = "";
-  importMsg.textContent = "";
   show("combine");
   try {
     const filenames = await fetchSetFilenames(set);
@@ -676,8 +712,8 @@ async function showCombine(set) {
   combineResultsCache = loadResults(set);
   const n = combineResultsCache.length;
   $("#combine-meta").textContent = n === 0
-    ? "No results yet — paste a friend's result below, or rank it yourself."
-    : `${n} ranking${n === 1 ? "" : "s"} submitted. Showing the combined order; tap a name to see theirs.`;
+    ? "No rankings yet. Rank it yourself, or open a friend's shared link to add theirs."
+    : `${n} ranking${n === 1 ? "" : "s"}. Showing the combined order; tap a name to see an individual ranking.`;
   renderCombine(0);
 }
 
@@ -804,16 +840,13 @@ $("#rematch-btn").addEventListener("click", startRanking);
 newBtn.addEventListener("click", () => { clearAll(); goHome(); });
 
 // ── events: set intro ──
-$("#set-start-btn").addEventListener("click", startRanking);
+$("#set-start-btn").addEventListener("click", () => { captureName(); startRanking(); });
 $("#set-results-btn").addEventListener("click", () => showCombine(currentSet));
 $("#set-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
 
 // ── events: sharing a result ──
 $("#share-result-btn").addEventListener("click", () => {
-  const raw = prompt("Your name (so the owner knows whose ranking this is):", "");
-  if (raw === null) return;
-  const payload = buildPayload(raw.trim() || "Anonymous");
-  shareLinkEl.value = resultLink(payload);
+  shareLinkEl.value = resultLink(buildPayload(participantName || "Me"));
   shareBox.hidden = false;
   shareBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
 });
@@ -827,19 +860,6 @@ $("#email-link-btn").addEventListener("click", () => {
 $("#view-combined-btn").addEventListener("click", () => showCombine(currentSet));
 
 // ── events: combine ──
-$("#import-btn").addEventListener("click", () => {
-  const raw = $("#import-box").value;
-  if (!raw.trim()) return;
-  try {
-    const set = addResultPayload(extractPayload(raw));
-    $("#import-box").value = "";
-    importMsg.textContent = "Added ✓";
-    if (set === currentSet) { combineResultsCache = loadResults(set); renderCombine(0); }
-    else showCombine(set);
-  } catch (e) {
-    importMsg.textContent = "That didn't look like a valid result code or link.";
-  }
-});
 $("#combine-rank-btn").addEventListener("click", () => startSetFlow(currentSet));
 $("#combine-copylink-btn").addEventListener("click", (e) => copyText(shareLinkForSet(currentSet), e.target));
 $("#combine-clear-btn").addEventListener("click", () => {

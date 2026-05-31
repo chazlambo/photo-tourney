@@ -55,6 +55,12 @@
       <p id="set-meta" class="hint"></p>
 
       <div class="setup">
+        <p class="setup-label">Your name (so your ranking is labelled in the results)</p>
+        <input id="participant-name" class="name-input" type="text" maxlength="40"
+          placeholder="e.g. Charlie" autocomplete="name" />
+      </div>
+
+      <div class="setup">
         <p class="setup-label">How thorough should your ranking be?</p>
         <div class="chips" id="chips-set">
           <button class="chip" data-rounds="3">Quick</button>
@@ -148,18 +154,11 @@
       <div id="combine-tabs" class="tabs"></div>
       <div id="combine-ranking" class="ranking"></div>
 
-      <div class="setup">
-        <p class="setup-label">Add a friend's result</p>
-        <textarea id="import-box" class="code-box" rows="3"
-          placeholder="Paste a friend's result code or link here…"></textarea>
-        <div class="results-actions">
-          <button id="import-btn" class="btn primary small">Add result</button>
-          <button id="combine-rank-btn" class="btn ghost small">Rank this set myself</button>
-          <button id="combine-copylink-btn" class="btn ghost small">Copy share link</button>
-          <button id="combine-clear-btn" class="btn ghost small">Clear all</button>
-          <button id="combine-home-btn" class="btn ghost small">← Home</button>
-        </div>
-        <p id="import-msg" class="hint"></p>
+      <div class="results-actions">
+        <button id="combine-rank-btn" class="btn ghost small">Rank this set myself</button>
+        <button id="combine-copylink-btn" class="btn ghost small">Copy share link</button>
+        <button id="combine-clear-btn" class="btn ghost small">Clear all</button>
+        <button id="combine-home-btn" class="btn ghost small">← Home</button>
       </div>
     </section>
   </main>
