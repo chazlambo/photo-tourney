@@ -52,10 +52,11 @@ can rank from a link — no backend, no accounts.
    person's ranking plus a **combined ranking** (Borda count). Results you collect are
    stored in your browser.
 
-The shared-sets UI (browser, share, and combine) is **only reachable via URLs** —
-`?set=…`, `?import=…`, `?set=…&results`, and `?browse`. The normal local upload flow
-has no link to it, so a regular visitor who just ranks their own photos never sees any
-sharing option. To see the list of all sets in the repo, open `…/?browse`.
+The home screen has a **"Rank a shared set →"** button that lists every set in the repo
+to pick from (same as opening `…/?browse`). Finishing a set ranking automatically adds
+your ranking to that set's combined results on your device; **share/combine controls
+only ever appear for shared sets** — someone who just uploads their own photos and ranks
+them locally sees no sharing option at all.
 
 Only you can create sets (only you can commit to the repo). See `sets/README.md` for
 details. Note: a shared set's images live in the **public** repo.

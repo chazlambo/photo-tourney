@@ -41,6 +41,9 @@ footer {
 .screen { display: none; }
 .screen.active { display: block; }
 
+/* the hidden attribute must win over any display rule (e.g. .results-actions) */
+[hidden] { display: none !important; }
+
 /* ── buttons ── */
 .btn {
   border: 1px solid var(--border);
@@ -377,6 +380,7 @@ footer {
 
 /* ── shared sets / combine ── */
 #set-intro h2, #combine h2, #sets h2 { text-align: center; margin-bottom: 4px; }
+.nav-row { text-align: center; margin-top: 26px; }
 
 .sets-list { display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
 .set-row {

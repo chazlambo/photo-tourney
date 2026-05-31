@@ -401,8 +401,20 @@ function finish() {
   setResultActions.hidden = !isSet;
   newBtn.hidden = isSet;
   shareBox.hidden = true;
+  if (isSet) autoAddOwnResult();
   show("results");
   saveState();
+}
+
+// When you finish ranking a shared set, your ranking is automatically part of
+// that set's combined results (stored on this device as "You").
+function autoAddOwnResult() {
+  if (mode !== "set" || !currentSet) return;
+  const entry = { n: "You", o: rankedPhotos().map((p) => p.cidx), c: photos.length };
+  const arr = loadResults(currentSet);
+  const i = arr.findIndex((x) => x.n.toLowerCase() === "you");
+  if (i >= 0) arr[i] = entry; else arr.push(entry);
+  saveResults(currentSet, arr);
 }
 
 function renderResults(ranked) {
@@ -812,14 +824,6 @@ $("#email-link-btn").addEventListener("click", () => {
   const body = encodeURIComponent(`Here's my ranking — open this link to add it:\n\n${shareLinkEl.value}`);
   location.href = `mailto:${OWNER_EMAIL}?subject=${subject}&body=${body}`;
 });
-$("#add-mine-btn").addEventListener("click", () => {
-  const raw = prompt("Save your ranking under what name?", "Me");
-  if (raw === null) return;
-  const name = raw.trim();
-  if (!name) return;
-  addResultPayload(buildPayload(name));
-  showCombine(currentSet);
-});
 $("#view-combined-btn").addEventListener("click", () => showCombine(currentSet));
 
 // ── events: combine ──
@@ -847,7 +851,8 @@ $("#combine-clear-btn").addEventListener("click", () => {
 });
 $("#combine-home-btn").addEventListener("click", goHome);
 
-// ── events: browse (sets browser reachable only via the ?browse URL, owner-only) ──
+// ── events: browse (sets browser — "Rank a shared set" on home, or the ?browse URL) ──
+$("#browse-btn").addEventListener("click", showBrowse);
 $("#sets-home-btn").addEventListener("click", goHome);
 
 // ── events: keyboard ──

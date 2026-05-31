@@ -12,11 +12,15 @@ Friends open the link, rank the set, and send you back a "result link". You coll
 everyone's results in the **Combine** view (the *Results* button on the set screen, or
 `?set=beach-2026&results`), which shows each person's ranking plus a combined ranking.
 
-The shared-sets UI is intentionally hidden from the normal local flow (someone who just
-ranks their own uploaded photos sees no sharing/sets option). Reach it only via URLs:
-- `?browse` — list every set in this folder (your owner entry point).
-- `?set=NAME` — rank a set. `?set=NAME&results` — the Combine/results view for a set.
+Entry points:
+- The home screen's **"Rank a shared set →"** button lists every set here to pick from
+  (equivalent to `?browse`).
+- `?set=NAME` — rank a set directly (this is the link you send friends).
+- `?set=NAME&results` — the Combine/results view for a set.
 - `?import=CODE` — add a friend's pasted result and open that set's Combine view.
+
+Share/combine controls only ever appear for shared sets — someone who just ranks their
+own uploaded photos locally sees no sharing option.
 
 Notes:
 - Folder names become the share id — keep them simple (lowercase, hyphens), no spaces.
