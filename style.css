@@ -193,6 +193,8 @@ footer {
   flex: 1;
   display: flex;
   min-height: 0;
+  gap: 14px;          /* black separation so the two photos never touch */
+  padding: 10px;
 }
 .half {
   flex: 1;

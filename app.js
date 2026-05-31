@@ -413,6 +413,24 @@ function advance() {
   renderMatch();
 }
 
+// Preload upcoming matchups' images while the user decides, so advancing to the
+// next pair is instant (shared-set photos are full-size and load over the network).
+const _preloadCache = [];
+function preloadUrl(url) {
+  if (!url) return;
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+  _preloadCache.push(img);
+  if (_preloadCache.length > 16) _preloadCache.shift(); // cap refs; browser keeps the HTTP cache
+}
+function preloadUpcoming() {
+  for (let i = 0; i < 4 && i < queue.length; i++) {
+    preloadUrl(queue[i][0].url);
+    preloadUrl(queue[i][1].url);
+  }
+}
+
 function renderMatch() {
   const [a, b] = currentMatch;
   const imgA = cards[0].querySelector("img");
@@ -425,6 +443,7 @@ function renderMatch() {
   roundInfo.textContent = `Round ${roundNumber}/${targetRounds} · pick ${matchesPlayed + 1} of ~${estTotalPicks}`;
   progressFill.style.width = Math.min(99, (matchesPlayed / estTotalPicks) * 100) + "%";
   undoBtn.disabled = history.length === 0;
+  preloadUpcoming();
   saveState();
 }
 
