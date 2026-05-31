@@ -801,13 +801,23 @@ function renderCombined() {
   renderRankingGrid(combineRanking, order, badge);
   $("#combine-overall-btn").classList.add("active");
   combinePerson.value = "";
+  const nn = combineResultsCache.length;
+  $("#combine-meta").textContent = nn === 0
+    ? "No rankings yet — be the first to rank this set."
+    : `${nn} ranking${nn === 1 ? "" : "s"} so far.`;
 }
 function renderPerson(i) {
   const r = combineResultsCache[i];
   if (!r) return;
   const N = photos.length;
-  renderRankingGrid(combineRanking, (r.o || []).filter((c) => c < N));
+  // each photo's placement points in this person's ranking (top = most points)
+  const order = (r.o || []).filter((c) => c >= 0 && c < N);
+  const badge = {};
+  order.forEach((cidx, pos) => (badge[cidx] = (order.length - pos) + " pts"));
+  renderRankingGrid(combineRanking, order, badge);
   $("#combine-overall-btn").classList.remove("active");
+  $("#combine-meta").textContent = r.n + " — " +
+    (Number(r.m) > 0 ? `made ${r.m} comparisons` : `ranked all ${order.length} photos`);
 }
 
 async function showCombine(set) {
