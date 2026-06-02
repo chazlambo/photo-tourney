@@ -188,7 +188,15 @@ async function uploadPhoto() {
     dataUrl: pickedDataUrl, uploadId: pickedUploadId, filenameHint: ($("#add-hint").value || "").trim(),
   });
   if (!authGuard(res)) return;
-  if (res.status !== 200 || !data.ok) { $("#add-msg").textContent = data.error || "Upload failed."; $("#add-upload-btn").disabled = false; return; }
+  if (res.status !== 200 || !data.ok) {
+    // Surface the upstream GitHub status (data.status) so token/permission
+    // failures are diagnosable without DevTools — e.g. "github write failed (GitHub 401)".
+    let msg = data.error || "Upload failed.";
+    if (data.status) msg += ` (GitHub ${data.status})`;
+    $("#add-msg").textContent = msg;
+    $("#add-upload-btn").disabled = false;
+    return;
+  }
   previews[data.filename] = pickedDataUrl;     // remember for placement display
   toast("Uploaded — now place it.");
   // reset add form
