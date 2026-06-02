@@ -78,8 +78,10 @@ async function loadPhotos() {
   if (res.status !== 200) { toast(data.error || "Couldn't load roster."); return; }
   $("#photos-meta").textContent = `${data.n} active · ${data.hidden.length} hidden · ${data.pending.length} pending`;
 
-  renderGrid($("#active-grid"), data.active, "active");
-  renderGrid($("#hidden-grid"), data.hidden, "hidden");
+  // Highest-rated first, so the strongest photos are easy to scan.
+  const byElo = (a, b) => (b.elo - a.elo) || a.name.localeCompare(b.name);
+  renderGrid($("#active-grid"), data.active.slice().sort(byElo), "active");
+  renderGrid($("#hidden-grid"), data.hidden.slice().sort(byElo), "hidden");
 
   const pendWrap = $("#pending-wrap");
   if (data.pending.length) { pendWrap.hidden = false; renderPending($("#pending-list"), data.pending, data.placement); }

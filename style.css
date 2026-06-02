@@ -416,7 +416,7 @@ footer {
   overflow: hidden;
   position: relative;
 }
-.rank-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.rank-item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; cursor: zoom-in; }
 .rank-badge {
   position: absolute; top: 8px; left: 8px;
   background: rgba(0,0,0,.85); color: #fff;
@@ -500,12 +500,32 @@ a.browse-cta { text-align: center; text-decoration: none; box-sizing: border-box
 
 /* ── admin.html (roster management) ── */
 .admin-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
-.admin-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+/* Full photo at its true aspect ratio so portrait vs. landscape is obvious. */
+.admin-card img { width: 100%; height: auto; display: block; background: #000; cursor: zoom-in; }
 .admin-card.dim img { opacity: .45; }
 .admin-cap { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; font-size: .76rem; color: var(--muted); }
 .admin-cap span { margin-right: auto; }
 .admin-cap .pill { padding: 7px 11px; font-size: .76rem; }
 #photos h2, #add h2, #publish h2 { text-align: center; margin: 14px 0 2px; }
 #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; max-width: 90vw; min-height: 0; margin: 0; z-index: 100; }
+
+/* ── lightbox (shared: click any ranking/admin photo to view full-size) ── */
+.lightbox {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; background: rgba(0,0,0,.92); cursor: zoom-out;
+}
+.lightbox[hidden] { display: none; }
+.lightbox-figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 100%; max-height: 100%; }
+.lightbox-img { max-width: 100%; max-height: calc(100vh - 80px); object-fit: contain; border-radius: 8px; box-shadow: 0 10px 50px rgba(0,0,0,.6); cursor: default; }
+.lightbox-cap { color: #c7ccd6; font-size: .8rem; word-break: break-all; text-align: center; }
+.lightbox-close {
+  position: fixed; top: 12px; right: 14px; z-index: 1001;
+  width: 44px; height: 44px; border-radius: 999px;
+  background: rgba(20,22,28,.85); color: #fff; border: 1px solid var(--border);
+  font-size: 1.1rem; cursor: pointer;
+}
+.lightbox-close:hover { background: rgba(44,48,58,.9); }
+body.lightbox-open { overflow: hidden; }
 #toast:empty { display: none; }
 #place .half-key { background: var(--accent); color: #062; font-weight: 700; }
