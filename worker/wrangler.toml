@@ -1,0 +1,29 @@
+# Cloudflare Worker + Durable Object for the LIVING shared-Elo page (live.html).
+# This is a SEPARATE worker from the dashboard-pasted results worker
+# (worker/results-worker.js) — deploy it with the Wrangler CLI:
+#
+#   cd worker
+#   npx wrangler secret put ADMIN_TOKEN     # optional, enables /admin/reseed
+#   npx wrangler deploy
+#
+# (A Durable Object cannot be created by pasting into the dashboard — it needs
+# the migration below, which only the CLI applies.)
+
+name = "photo-tourney-elo"
+main = "elo-worker.js"
+compatibility_date = "2026-01-01"
+
+# Only ALLOWED_ORIGIN and SET are read by the worker; the set's name, size,
+# version, and fingerprint are the baked seed's (worker/seed/seed.js).
+[vars]
+ALLOWED_ORIGIN = "https://chazlambo.github.io"
+SET = "charlie-nature-photos"
+
+[[durable_objects.bindings]]
+name = "SHARED_ELO"
+class_name = "SharedElo"
+
+# SQLite-backed Durable Object → eligible on the Workers free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SharedElo"]

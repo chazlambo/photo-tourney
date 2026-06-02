@@ -493,3 +493,7 @@ footer {
   }
   .pill { padding: 12px 15px; font-size: .86rem; }
 }
+
+/* ── live.html (living shared-Elo page) ── */
+a.browse-cta { text-align: center; text-decoration: none; box-sizing: border-box; }
+.lb-meta { text-align: center; color: var(--muted); font-size: .8rem; margin: 2px 0 12px; line-height: 1.5; }

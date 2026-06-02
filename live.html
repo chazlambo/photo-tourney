@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Living Nature-Photo Ranking</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🌿 Living Nature-Photo Ranking</h1>
+    <p class="tagline">Pick your favourites head-to-head. Everyone's picks shape one shared ranking.</p>
+  </header>
+
+  <main>
+    <!-- ───────────── Gate (enter name) ───────────── -->
+    <section id="gate" class="screen active">
+      <p id="gate-msg" class="hint"></p>
+
+      <div class="setup">
+        <p class="setup-label">Your name (so we can count contributors)</p>
+        <input id="live-name" class="name-input" type="text" maxlength="40"
+          placeholder="e.g. Charlie" autocomplete="name" autofocus />
+      </div>
+
+      <p class="hint">You'll just compare two photos at a time. The current rankings stay hidden
+        while you pick — so your choices aren't biased — and you can view them any time (which ends your session).</p>
+
+      <div class="upload-actions">
+        <button id="live-start-btn" class="btn primary" disabled>Start ranking</button>
+      </div>
+      <div class="results-actions">
+        <button id="gate-board-btn" class="btn ghost small">See rankings without ranking</button>
+        <a href="index.html" class="btn ghost small">← Main app</a>
+      </div>
+    </section>
+
+    <!-- ───────────── Match ───────────── -->
+    <section id="match" class="screen">
+      <div class="stage">
+        <a href="index.html" class="stage-exit" title="Back to main app">↺ Exit</a>
+        <div class="topbar">
+          <span id="live-count"></span>
+          <span id="live-status" class="kb-hint"></span>
+          <span id="kb-hint" class="kb-hint"></span>
+        </div>
+
+        <div class="duel">
+          <button class="half" type="button" data-side="0" aria-label="Pick left photo">
+            <img alt="Left photo" />
+            <span class="half-key">1</span>
+          </button>
+          <div class="divider"></div>
+          <button class="half" type="button" data-side="1" aria-label="Pick right photo">
+            <img alt="Right photo" />
+            <span class="half-key">2</span>
+          </button>
+        </div>
+
+        <div class="controls">
+          <button id="live-fs-btn" class="pill" title="Fullscreen (F)">⛶ Fullscreen</button>
+          <button id="live-board-btn" class="pill primary">📊 See rankings →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Board (the ONLY Elo surface; terminal) ───────────── -->
+    <section id="board" class="screen">
+      <h2>🏆 Living Ranking</h2>
+      <p id="board-sub" class="hint"></p>
+      <p id="board-meta" class="lb-meta"></p>
+      <div id="board-ranking" class="ranking"></div>
+
+      <div class="results-actions">
+        <button id="board-again-btn" class="btn primary">Start a new session</button>
+        <button id="board-refresh-btn" class="btn ghost">Refresh</button>
+        <a href="index.html" class="btn ghost">← Main app</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>One shared, living ranking — your picks update it for everyone, instantly.</p>
+  </footer>
+
+  <script src="live.js"></script>
+</body>
+</html>
