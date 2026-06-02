@@ -113,13 +113,15 @@ export default {
     );
     if (setCheck.status === 404) return json({ error: "unknown set" }, 400, cors);
     if (!setCheck.ok && setCheck.status !== 200) return json({ error: "set check failed" }, 502, cors);
-    // Reject submissions whose photo count doesn't match the set's current size
-    // (stops stale/resumed sessions ranking a since-changed set from polluting results).
+    // Reject submissions ranking MORE photos than the set currently has on disk
+    // (stale/resumed session). We allow count <= setSize because the living-Elo
+    // page (elo-worker) may soft-hide photos whose image files still exist in the
+    // repo, so the on-disk count can legitimately exceed a ranking's photo count.
     const setItems = await setCheck.json();
     const setSize = Array.isArray(setItems)
       ? setItems.filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name)).length
       : 0;
-    if (setSize && count !== setSize) {
+    if (setSize && count > setSize) {
       return json({ error: "set changed; please reload", expected: setSize, got: count }, 409, cors);
     }
 

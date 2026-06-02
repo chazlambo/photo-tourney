@@ -3,7 +3,8 @@
 # (worker/results-worker.js) — deploy it with the Wrangler CLI:
 #
 #   cd worker
-#   npx wrangler secret put ADMIN_TOKEN     # optional, enables /admin/reseed
+#   npx wrangler secret put ADMIN_TOKEN     # enables all /admin/* (hide, add, reseed)
+#   npx wrangler secret put ELO_GH_TOKEN    # only for adding photos (Contents:R+W PAT)
 #   npx wrangler deploy
 #
 # (A Durable Object cannot be created by pasting into the dashboard — it needs
@@ -13,11 +14,13 @@ name = "photo-tourney-elo"
 main = "elo-worker.js"
 compatibility_date = "2026-01-01"
 
-# Only ALLOWED_ORIGIN and SET are read by the worker; the set's name, size,
-# version, and fingerprint are the baked seed's (worker/seed/seed.js).
+# Read by the worker: ALLOWED_ORIGIN, SET, REPO (REPO is used only by the admin
+# photo-upload endpoint to commit images via the GitHub API). The set's size,
+# version, and fingerprint live in the DO's roster (bootstrapped from worker/seed/seed.js).
 [vars]
 ALLOWED_ORIGIN = "https://chazlambo.github.io"
 SET = "charlie-nature-photos"
+REPO = "chazlambo/photo-tourney"
 
 [[durable_objects.bindings]]
 name = "SHARED_ELO"

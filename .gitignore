@@ -5,3 +5,7 @@ desktop.ini
 *.swp
 .vscode/
 .idea/
+
+# Cloudflare Wrangler local cache / state
+worker/.wrangler/
+.dev.vars

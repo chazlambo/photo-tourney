@@ -38,12 +38,16 @@ const RESULTS_DIR = join(ROOT, "results", SET);
 const SETS_DIR = join(ROOT, "sets", SET);
 const OUT_FILE = join(ROOT, "worker", "seed", "seed.js");
 
-// Canonical filename ordering — KEEP IN SYNC with app.js:626-629.
+// Canonical filename ordering — KEEP IN SYNC with elo-worker.js sortCmp + app.js:629.
+// Locale pinned to "en" so Node, Workers, and browsers agree byte-for-byte.
+// NOTE: this seed is the DO's BOOTSTRAP only. Once deployed, the living roster is
+// owned by the Durable Object (admin hides/adds); those edits are NOT written back
+// here. Regenerating + reseeding resets known photos to these baseline ratings.
 const IMG_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i;
 function sortNames(names) {
   return names
     .filter((n) => IMG_RE.test(n))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
 
 function die(msg) {

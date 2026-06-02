@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <!-- Lock down sources; allow blob:/data: previews and the elo worker for XHR. -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; img-src 'self' https://chazlambo.github.io blob: data:; connect-src https://photo-tourney-elo.charlie-lambert.workers.dev; style-src 'self'; script-src 'self';" />
+  <title>Living Set — Admin</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>🔧 Living Set — Admin</h1>
+    <p class="tagline">Manage the nature-photo set: hide photos, add new ones.</p>
+  </header>
+
+  <main>
+    <!-- ───────────── Login ───────────── -->
+    <section id="login" class="screen active">
+      <div class="setup">
+        <p class="setup-label">Admin password</p>
+        <input id="admin-pass" class="name-input" type="password" autocomplete="current-password" placeholder="••••••••" />
+      </div>
+      <p id="login-msg" class="hint"></p>
+      <div class="upload-actions">
+        <button id="login-btn" class="btn primary">Unlock</button>
+      </div>
+      <div class="results-actions">
+        <a href="live.html" class="btn ghost small">← Ranking page</a>
+      </div>
+    </section>
+
+    <!-- ───────────── Photos ───────────── -->
+    <section id="photos" class="screen">
+      <p id="photos-meta" class="hint"></p>
+      <div class="upload-actions">
+        <button id="add-photo-btn" class="btn primary">➕ Add a photo</button>
+        <button id="photos-refresh-btn" class="btn ghost">Refresh</button>
+      </div>
+
+      <div id="pending-wrap" hidden>
+        <h2>Pending (not yet live)</h2>
+        <div id="pending-list" class="ranking"></div>
+      </div>
+
+      <h2>Active</h2>
+      <div id="active-grid" class="ranking"></div>
+
+      <h2>Hidden</h2>
+      <div id="hidden-grid" class="ranking"></div>
+
+      <div class="results-actions">
+        <a href="live.html" class="btn ghost small">← Ranking page</a>
+      </div>
+    </section>
+
+    <!-- ───────────── Add ───────────── -->
+    <section id="add" class="screen">
+      <h2>Add a photo</h2>
+      <div class="setup">
+        <p class="setup-label">Choose an image (JPEG / PNG / WebP / AVIF, ≤ 8 MB)</p>
+        <input id="add-file" type="file" accept="image/jpeg,image/png,image/webp,image/avif" />
+      </div>
+      <div id="add-preview-wrap" class="ranking" hidden>
+        <div class="rank-item"><img id="add-preview" alt="Selected photo preview" /></div>
+      </div>
+      <div class="setup">
+        <p class="setup-label">Optional name hint (for the filename)</p>
+        <input id="add-hint" class="name-input" type="text" maxlength="24" placeholder="e.g. sunset-ridge" />
+      </div>
+      <p id="add-msg" class="hint"></p>
+      <div class="upload-actions">
+        <button id="add-upload-btn" class="btn primary" disabled>Upload</button>
+        <button id="add-cancel-btn" class="btn ghost">Back</button>
+      </div>
+    </section>
+
+    <!-- ───────────── Placement ───────────── -->
+    <section id="place" class="screen">
+      <div class="stage">
+        <button id="place-exit" class="stage-exit" type="button" title="Abandon placement">↺ Abandon</button>
+        <div class="topbar">
+          <span id="place-count"></span>
+          <span id="place-hint" class="kb-hint">Tap the better photo</span>
+        </div>
+        <div class="duel">
+          <button class="half" type="button" data-side="0" aria-label="New photo wins">
+            <img id="place-img-a" alt="New photo" />
+            <span class="half-key">NEW</span>
+          </button>
+          <div class="divider"></div>
+          <button class="half" type="button" data-side="1" aria-label="Existing photo wins">
+            <img id="place-img-b" alt="Existing photo" />
+          </button>
+        </div>
+        <div class="controls">
+          <button id="place-finish-btn" class="pill primary" hidden>Finish & rate →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────── Publish ───────────── -->
+    <section id="publish" class="screen">
+      <h2>Placement complete</h2>
+      <p id="publish-msg" class="hint"></p>
+      <div class="ranking">
+        <div class="rank-item"><img id="publish-img" alt="New photo" /><span id="publish-rating" class="rank-record"></span></div>
+      </div>
+      <div class="upload-actions">
+        <button id="publish-btn" class="btn primary">Publish to everyone</button>
+        <button id="publish-later-btn" class="btn ghost">Leave pending</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="hint" role="status" aria-live="polite"></div>
+
+  <footer><p>Admin actions are password-protected and apply to the living set instantly.</p></footer>
+
+  <script src="admin.js"></script>
+</body>
+</html>

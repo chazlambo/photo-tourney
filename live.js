@@ -73,24 +73,14 @@ const statusEl = $("#live-status");
 const kbHint = $("#kb-hint");
 const stageEl = document.querySelector(".stage");
 
-// ── canonical filename ordering — KEEP IN SYNC with app.js:626-629 ──
-const IMG_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i;
-async function fetchSetFilenames(set) {
-  const api = `https://api.github.com/repos/${REPO}/contents/${encodeURIComponent("sets/" + set)}`;
-  const res = await fetch(api, { headers: { Accept: "application/vnd.github+json" } });
-  if (res.status === 404) throw new Error(`No set named "${set}" was found.`);
-  if (res.status === 403) throw new Error("GitHub rate limit hit — please try again in a few minutes.");
-  if (!res.ok) throw new Error("Couldn't load that set (network error).");
-  const items = await res.json();
-  return items
-    .filter((i) => i.type === "file" && IMG_RE.test(i.name))
-    .map((i) => i.name)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-}
-async function computeFingerprint(list) {
-  const data = new TextEncoder().encode(list.join("\n"));
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+// ── roster (the DO is the source of truth: which photos are active + the
+//    fingerprint/version). The page no longer lists GitHub or hashes anything. ──
+async function loadRoster() {
+  const r = await fetchJSON(API + "/roster");
+  if (!r.names || r.names.length < 2) throw new Error("This set needs at least 2 photos.");
+  names = r.names;          // index == cidx, matches the DO
+  fp = r.fp;
+  seedV = r.v;              // version token "seedV#mutationSeq"
 }
 
 // ── boot ──
@@ -102,15 +92,8 @@ async function boot() {
     return;
   }
   try {
-    names = await fetchSetFilenames(LIVE_SET);
-    if (names.length < 2) throw new Error("This set needs at least 2 photos.");
-    fp = await computeFingerprint(names);
+    await loadRoster();
     const meta = await fetchJSON(API + "/meta");
-    if (meta.fp && meta.fp !== fp) {
-      gateFatal("This set's photos changed since the ranking was set up. The owner needs to re-seed before ranking can continue.");
-      return;
-    }
-    seedV = meta.v || "";
     gateMsg.textContent = meta.totalPicks
       ? `${meta.totalPicks.toLocaleString()} picks so far across everyone. Add yours →`
       : "Be the first to start shaping the ranking →";
@@ -118,8 +101,29 @@ async function boot() {
     gateFatal((e && e.message) || "Couldn't reach the ranking service. Please try again.");
     return;
   }
+  syncStart();
   // try to drain anything stranded in the outbox from a previous visit
   flushOutbox();
+}
+
+// Re-pull the roster after a roster change (a 409 from /pick). Blocks picks until
+// the buffer is rebuilt so a stale cidx can never be tapped.
+let refreshing = false;
+async function refreshRoster() {
+  if (refreshing) return;
+  refreshing = true;
+  busy = true;
+  try {
+    await loadRoster();
+    setChangedShown = false;
+    buffer = [];
+    await topUp();
+    renderHead();
+  } catch (e) {
+    handleSetChanged();
+  } finally {
+    refreshing = false;
+  }
 }
 function gateFatal(msg) {
   gateMsg.textContent = msg;
@@ -178,7 +182,7 @@ async function startSession() {
 // ── pairing buffer ──
 async function getPair() {
   const p = await fetchJSON(API + "/pair?sid=" + encodeURIComponent(sid));
-  return { a: p.a, b: p.b };
+  return { a: p.a, b: p.b, v: p.v };  // stamp each pair with the version it was minted under
 }
 async function topUp() {
   if (topping) return;
@@ -208,10 +212,19 @@ function renderHead() {
   }
   const imgA = cards[0].querySelector("img");
   const imgB = cards[1].querySelector("img");
+  // If a photo's image is missing (e.g. just-published, still propagating to
+  // Pages, or hidden), skip this pair rather than allowing a pick on a broken duel.
+  imgA.onerror = imgB.onerror = onDuelImageError;
   imgA.src = setImageUrl(names[cur.a]);
   imgB.src = setImageUrl(names[cur.b]);
   cards.forEach((c) => c.classList.remove("flash"));
   busy = false;
+}
+function onDuelImageError() {
+  if (!$("#match").classList.contains("active")) return;
+  busy = true;            // block picks on the broken duel
+  buffer.shift();         // drop it
+  topUp().then(renderHead);
 }
 function showSpinner() {
   const imgA = cards[0].querySelector("img");
@@ -231,7 +244,7 @@ function pick(side) {
   picksThisSession++;
   updateCount();
   outboxPush({
-    sid, winner, loser, pickId: uuid(), fp, v: seedV,
+    sid, winner, loser, pickId: uuid(), fp, v: cur.v,
     device: deviceId, name: participantName,
   });
   flushOutbox();
@@ -263,6 +276,7 @@ async function flushOutbox() {
     const fresh = Date.now() - OUTBOX_MAX_AGE_MS;
     const trimmed = arr.filter((e) => (e.ts || 0) >= fresh);
     if (trimmed.length !== arr.length) { arr = trimmed; outboxWrite(arr); }
+    let sawSetChanged = false;
     while (arr.length) {
       const entry = arr[0];
       let res;
@@ -280,10 +294,15 @@ async function flushOutbox() {
         // drop it — retrying won't help, and votes are global so nothing's "lost".
         arr.shift();
         outboxWrite(arr);
-        if (res.status === 409) handleSetChanged();
+        if (res.status === 409) sawSetChanged = true;
       } else {
         break; // 5xx — server hiccup, retry later
       }
+    }
+    if (sawSetChanged) {
+      // the roster moved under us — auto-recover if mid-ranking, else flag it
+      if ($("#match").classList.contains("active")) refreshRoster();
+      else handleSetChanged();
     }
   } finally {
     flushing = false;

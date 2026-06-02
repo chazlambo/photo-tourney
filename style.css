@@ -497,3 +497,15 @@ footer {
 /* ── live.html (living shared-Elo page) ── */
 a.browse-cta { text-align: center; text-decoration: none; box-sizing: border-box; }
 .lb-meta { text-align: center; color: var(--muted); font-size: .8rem; margin: 2px 0 12px; line-height: 1.5; }
+
+/* ── admin.html (roster management) ── */
+.admin-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.admin-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.admin-card.dim img { opacity: .45; }
+.admin-cap { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; font-size: .76rem; color: var(--muted); }
+.admin-cap span { margin-right: auto; }
+.admin-cap .pill { padding: 7px 11px; font-size: .76rem; }
+#photos h2, #add h2, #publish h2 { text-align: center; margin: 14px 0 2px; }
+#toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; max-width: 90vw; min-height: 0; margin: 0; z-index: 100; }
+#toast:empty { display: none; }
+#place .half-key { background: var(--accent); color: #062; font-weight: 700; }
