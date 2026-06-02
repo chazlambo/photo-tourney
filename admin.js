@@ -195,7 +195,7 @@ async function uploadPhoto() {
 }
 
 // ── placement ──
-let placeFile = "", placeToken = "", placeStartedTarget = 0;
+let placeFile = "", placeToken = "";
 async function startPlacement(file) {
   const { res, data } = await api("/admin/placement/start", "POST", { file });
   if (!authGuard(res)) return;
@@ -205,7 +205,7 @@ async function startPlacement(file) {
   } else if (res.status !== 200) {
     toast(data.error || "Couldn't start placement."); loadPhotos(); return;
   } else {
-    placeFile = file; placeStartedTarget = data.targetN;
+    placeFile = file;
   }
   show("place");
   $("#place-finish-btn").hidden = true;
@@ -228,7 +228,7 @@ async function placePick(side) {
   const tok = placeToken; placeToken = "";
   document.querySelectorAll("#place .half")[side].classList.add("flash");
   const { res, data } = await api("/admin/placement/pick", "POST", { token: tok, newcomerWon: side === 0 });
-  if (!authGuard(res)) return;
+  if (!authGuard(res)) { if (res.status === 429) setTimeout(nextPair, 800); return; } // don't freeze the loop
   if (res.status !== 200) { toast(data.error || "Pick failed."); nextPair(); return; }
   setTimeout(nextPair, 180);
 }

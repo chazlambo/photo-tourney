@@ -626,7 +626,8 @@ async function fetchSetFilenames(set) {
   return items
     .filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name))
     .map((i) => i.name)
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    // locale pinned to "en" so this matches build-seed.mjs / elo-worker.js byte-for-byte (cidx invariant)
+    .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
 
 async function listSets() {

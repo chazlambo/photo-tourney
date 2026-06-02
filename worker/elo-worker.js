@@ -40,7 +40,10 @@ const MAX_SESSIONS = 2000;
 const MAX_SEEN_PER_SESSION = 4000;
 const MAX_SNAPSHOTS = 20;
 const MAX_CONTRIB = 200;
-const MAX_ACTIVE = 256;                     // coherent with results-worker.js MAX_PHOTOS
+const MAX_ACTIVE = 256;                     // cap on ACTIVE photos in the DO roster
+                                            // (results-worker.js MAX_PHOTOS=256 bounds a
+                                            // different quantity: a ranking's size vs the
+                                            // on-disk file count, which includes hidden)
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;   // decoded image size cap
 const MAX_BODY_BYTES = 11 * 1024 * 1024;    // base64 + JSON envelope cap
 const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
@@ -120,7 +123,11 @@ function sniffOk(mime, b) {
     b[4] === 0x0D && b[5] === 0x0A && b[6] === 0x1A && b[7] === 0x0A;
   if (mime === "image/webp") return b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
     b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50;
-  if (mime === "image/avif") return b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70; // 'ftyp'
+  if (mime === "image/avif") {
+    if (!(b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70)) return false; // 'ftyp'
+    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]); // major brand
+    return ["avif", "avis", "mif1", "msf1", "mia1"].includes(brand);
+  }
   return false;
 }
 
@@ -194,6 +201,9 @@ async function handlePhotoUpload(request, env, cors) {
   const mime = mm[1].toLowerCase();
   const content = mm[2]; // already-valid base64; passed straight to GitHub
   if (!ALLOWED_MIME[mime]) return J({ error: "unsupported image type" }, 400);
+  // Cap the raw base64 string too — the Content-Length header is client-controlled
+  // and may be missing/understated, which would otherwise let a huge body through.
+  if (content.length > MAX_BODY_BYTES) return J({ error: "payload too large" }, 413);
   // 4. decode head for magic-byte sniff + size
   let head, declen;
   try {
@@ -231,9 +241,15 @@ async function handlePhotoUpload(request, env, cors) {
   if (!put.ok) return J({ error: "github write failed", status: put.status, filename, registered: true, committed: false }, 502);
   let commitSha;
   try { commitSha = ((await put.json()).content || {}).sha; } catch (e) {}
-  // 8. mark committed in the DO (idempotent)
-  const cd = await doCall(env, "/admin/photo/commit-done", "POST", { filename, uploadId, commitSha }, auth);
-  return J({ ok: true, filename, committed: true, registered: cd.ok, commitSha, startElo: claim.startElo }, 200);
+  // 8. mark committed in the DO (idempotent). Retry once; if it still fails, do NOT
+  //    report success — the image is in the repo but unplaceable until registered.
+  //    Re-running the upload with the same uploadId recovers (claim + PUT idempotent).
+  let cd = await doCall(env, "/admin/photo/commit-done", "POST", { filename, uploadId, commitSha }, auth);
+  if (!cd.ok) cd = await doCall(env, "/admin/photo/commit-done", "POST", { filename, uploadId, commitSha }, auth);
+  if (!cd.ok) {
+    return J({ ok: false, error: "image saved but registration failed — re-click Upload to retry", filename, committed: true, registered: false }, 502);
+  }
+  return J({ ok: true, filename, committed: true, registered: true, commitSha, startElo: claim.startElo }, 200);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,19 +305,33 @@ export class SharedElo {
       schemaV: 2,
       photos: this.meta.names.map((name, i) => ({ name, status: "active", r: old.r[i], g: old.g[i], w: old.w[i], l: old.l[i] })),
     };
+    // Sanity-check the fingerprint, but DON'T throw — rebuildActive() recomputes
+    // meta.fingerprint from the active names right after this, so a completed
+    // migration self-corrects. Throwing here would reject `ready` and brick the
+    // DO (including the admin recovery endpoints). Record a warning instead.
     const checkFp = await fingerprintOf(this.roster.photos.map((p) => p.name));
-    if (checkFp !== this.meta.fingerprint) { this.roster = null; throw new Error("migration fingerprint mismatch; aborting"); }
+    if (checkFp !== this.meta.fingerprint) {
+      this.meta.migrationFpWarn = { expected: this.meta.fingerprint, got: checkFp, at: Date.now() };
+    }
     this.meta.schemaV = 2;
     this.meta.mutationSeq = this.meta.mutationSeq || 0;
     if (this.meta.placement === undefined) this.meta.placement = null;
     return true;
   }
 
+  // Defensive rebuild of the roster from the legacy projection. Only ever runs if
+  // schemaV>=2 but the roster key is missing (a partial write). Build ONLY aligned,
+  // finite entries — never produce NaN ratings, never throw (which would brick init).
   synthRosterFromElo() {
-    this.roster = {
-      schemaV: 2,
-      photos: this.meta.names.map((name, i) => ({ name, status: "active", r: this.elo.r[i], g: this.elo.g[i], w: this.elo.w[i], l: this.elo.l[i] })),
-    };
+    const names = (this.meta && this.meta.names) || [];
+    const r = (this.elo && this.elo.r) || [];
+    const n = Math.min(names.length, r.length);
+    const photos = [];
+    for (let i = 0; i < n; i++) {
+      const e = { name: names[i], status: "active", r: this.elo.r[i], g: this.elo.g[i], w: this.elo.w[i], l: this.elo.l[i] };
+      if ([e.r, e.g, e.w, e.l].every(Number.isFinite)) photos.push(e);
+    }
+    this.roster = { schemaV: 2, photos };
     this.meta.schemaV = 2;
     this.meta.mutationSeq = this.meta.mutationSeq || 0;
     if (this.meta.placement === undefined) this.meta.placement = null;
@@ -339,6 +369,13 @@ export class SharedElo {
     await this.state.storage.put("roster", this.roster);
     await this.state.storage.put("meta", this.meta);
     return { ok: true, reason, v: tokenOf(this.meta), fp: this.meta.fingerprint, n: this.meta.n };
+  }
+  // Batch MLE rating for a placement log, bounded + clamped to the active range.
+  fitPlacement(log) {
+    const ratings = this.elo.r;
+    const lo = Math.min(...ratings) - 400, hi = Math.max(...ratings) + 400;
+    let r = mleFit(log, lo, hi);
+    return Math.max(Math.min(...ratings) - 50, Math.min(Math.max(...ratings) + 50, r));
   }
 
   async fetch(request) {
@@ -575,8 +612,17 @@ export class SharedElo {
     return this.state.blockConcurrencyWhile(async () => {
       const snap = await this.state.storage.get(key);
       if (!snap || !snap.roster || !snap.meta) return json({ error: "snapshot not found" }, 404);
+      // Preserve LIVE counters and force the version token strictly forward, so a
+      // restore never rolls back totalPicks/contrib or collides with a token that
+      // stale clients still hold (which would wrongly accept their picks).
+      const liveSeq = this.meta.mutationSeq || 0;
+      const livePicks = this.meta.totalPicks;
+      const liveContrib = this.meta.contrib;
       this.roster = JSON.parse(JSON.stringify(snap.roster));
       this.meta = JSON.parse(JSON.stringify(snap.meta));
+      this.meta.mutationSeq = Math.max(liveSeq, this.meta.mutationSeq || 0); // _applyRosterChange bumps to +1
+      this.meta.totalPicks = livePicks;
+      this.meta.contrib = liveContrib;
       const res = await this._applyRosterChange("restore", { snapshot: false });
       return json({ ok: true, n: res.n, fp: res.fp, v: res.v });
     });
@@ -658,7 +704,7 @@ export class SharedElo {
       if (!p || p.status !== "pending") return json({ error: "not a pending photo" }, 404);
       if (!p.committed) return json({ error: "photo image not committed yet" }, 409);
       const active = this.roster.photos.filter((x) => x.status === "active");
-      if (active.length < 1) return json({ error: "need at least 1 active photo" }, 409);
+      if (active.length < 3) return json({ error: "need at least 3 active photos to place against" }, 409);
       const startRating = Math.round(median(active.map((x) => x.r)));
       let targetN = Number(body.targetN) || 10;
       targetN = Math.max(5, Math.min(30, Math.min(targetN, active.length)));
@@ -707,6 +753,7 @@ export class SharedElo {
       const oName = pl.curPair.oName;
       pl.log.push({ oName, oR: pl.oppSnapshot[oName], win: !!body.newcomerWon, ts: Date.now() });
       pl.curPair = null;
+      pl.ready = false; // a new pick invalidates any earlier finish/fit
       await this.state.storage.put("placement", pl);
       return json({ ok: true, games: pl.log.length, targetN: pl.targetN, done: done() });
     });
@@ -721,10 +768,7 @@ export class SharedElo {
       if (pl.startV !== tokenOf(this.meta)) return json({ error: "set changed; restart placement" }, 409);
       if (String(body.confirm || "") !== pl.file) return json({ error: "confirm must equal the filename" }, 409);
       if (pl.log.length < 3) return json({ error: "need at least 3 placement picks" }, 409);
-      const ratings = this.elo.r;
-      const lo = Math.min(...ratings) - 400, hi = Math.max(...ratings) + 400;
-      let r = mleFit(pl.log, lo, hi);
-      r = Math.max(Math.min(...ratings) - 50, Math.min(Math.max(...ratings) + 50, r));
+      const r = this.fitPlacement(pl.log);
       if (!Number.isFinite(r)) return json({ error: "non-finite fit" }, 500);
       pl.r = Math.round(r); pl.ready = true;
       await this.state.storage.put("placement", pl);
@@ -737,18 +781,28 @@ export class SharedElo {
     let body; try { body = await request.json(); } catch (e) { body = {}; }
     return this.state.blockConcurrencyWhile(async () => {
       const pl = this.placement;
-      if (!pl) return json({ error: "no placement" }, 409);
+      const confirm = String(body.confirm || "");
+      if (!pl) {
+        // Idempotent retry: if this file is already active, the publish succeeded.
+        const done = this.roster.photos.find((x) => x.name === confirm && x.status === "active");
+        if (done) return json({ ok: true, n: this.meta.n, fp: this.meta.fingerprint, v: tokenOf(this.meta), rating: Math.round(done.r), replayed: true });
+        return json({ error: "no placement" }, 409);
+      }
       if (pl.startV !== tokenOf(this.meta)) return json({ error: "set changed; restart placement" }, 409);
-      if (String(body.confirm || "") !== pl.file) return json({ error: "confirm must equal the filename" }, 409);
+      if (confirm !== pl.file) return json({ error: "confirm must equal the filename" }, 409);
       if (!pl.ready) return json({ error: "call finish first" }, 409);
       const p = this.roster.photos.find((x) => x.name === pl.file);
       if (!p) return json({ error: "photo vanished" }, 404);
       if (!p.committed) return json({ error: "photo not committed" }, 409);
-      p.status = "active"; p.r = pl.r; p.g = Math.round(median(this.elo.g)); p.w = 0; p.l = 0;
+      // Recompute the fit from the FULL log (don't trust pl.r — more picks may have
+      // arrived after finish), with the same active-rating bounds + finite guard.
+      const fit = this.fitPlacement(pl.log);
+      if (!Number.isFinite(fit)) return json({ error: "non-finite fit" }, 500);
+      p.status = "active"; p.r = Math.round(fit); p.g = Math.round(median(this.elo.g)); p.w = 0; p.l = 0;
       await this.state.storage.delete("placement");
       this.placement = null; this.meta.placement = null;
       const res = await this._applyRosterChange("placement-publish", { snapshot: true });
-      return json({ ok: true, n: res.n, fp: res.fp, v: res.v, rating: pl.r });
+      return json({ ok: true, n: res.n, fp: res.fp, v: res.v, rating: p.r });
     });
   }
 
@@ -773,6 +827,7 @@ export class SharedElo {
       const seedIdx = new Map(SEED.names.map((nm, i) => [nm, i]));
       let carried = 0, fresh = 0;
       for (const p of this.roster.photos) {
+        if (p.status !== "active") continue; // leave hidden/pending photos' Elo intact
         const si = seedIdx.get(p.name);
         if (si != null) { p.r = SEED.r[si]; p.g = 0; p.w = 0; p.l = 0; carried++; }
         else fresh++;

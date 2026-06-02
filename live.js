@@ -10,7 +10,6 @@
 
 // ── config ──
 const LIVE_SET = "charlie-nature-photos";
-const REPO = "chazlambo/photo-tourney";
 // Point this at the deployed Worker (see worker/README-elo.md). Trailing slash ok.
 const ELO_WORKER_URL = "https://photo-tourney-elo.charlie-lambert.workers.dev/";
 const PREFETCH = 3; // pairs buffered ahead so fast taps never stall
@@ -57,11 +56,12 @@ let names = [];        // sorted filenames; index == cidx (must match the DO's s
 let fp = "";           // 16-hex fingerprint of `names`
 let seedV = "";        // store version, echoed on each pick
 let sid = "";          // this session's id
-let buffer = [];       // queued {a, b} pairs from /pair
-let topping = false;   // guard against concurrent topUp()
+let buffer = [];       // queued {a, b, v} pairs from /pair
+let toppingP = null;   // in-flight topUp() promise (awaitable; guards concurrency)
 let picksThisSession = 0;
 let busy = false;      // mid-animation lock
 let starting = false;  // re-entrancy guard for startSession()
+let pendingRender = null; // handle for the +240ms post-pick renderHead timer
 
 // ── elements ──
 const gateMsg = $("#gate-msg");
@@ -113,16 +113,19 @@ async function refreshRoster() {
   if (refreshing) return;
   refreshing = true;
   busy = true;
+  if (pendingRender) { clearTimeout(pendingRender); pendingRender = null; }
   try {
     await loadRoster();
     setChangedShown = false;
-    buffer = [];
+    if (toppingP) { try { await toppingP; } catch (e) {} } // let any in-flight topUp settle first
+    buffer = [];                                           // then drop stale-token pairs
     await topUp();
-    renderHead();
+    renderHead();                                          // clears busy on success
   } catch (e) {
     handleSetChanged();
   } finally {
     refreshing = false;
+    busy = false;                                          // never leave the match screen locked
   }
 }
 function gateFatal(msg) {
@@ -184,18 +187,20 @@ async function getPair() {
   const p = await fetchJSON(API + "/pair?sid=" + encodeURIComponent(sid));
   return { a: p.a, b: p.b, v: p.v };  // stamp each pair with the version it was minted under
 }
-async function topUp() {
-  if (topping) return;
-  topping = true;
-  try {
-    while (buffer.length < PREFETCH) {
-      let pair;
-      try { pair = await getPair(); } catch (e) { break; }
-      buffer.push(pair);
-      // preload its images so the next render is instant
-      [pair.a, pair.b].forEach((c) => { const im = new Image(); im.src = setImageUrl(names[c]); });
-    }
-  } finally { topping = false; }
+function topUp() {
+  if (toppingP) return toppingP;        // coalesce concurrent calls; awaitable
+  toppingP = (async () => {
+    try {
+      while (buffer.length < PREFETCH) {
+        let pair;
+        try { pair = await getPair(); } catch (e) { break; }
+        buffer.push(pair);
+        // preload its images so the next render is instant
+        [pair.a, pair.b].forEach((c) => { if (names[c]) { const im = new Image(); im.src = setImageUrl(names[c]); } });
+      }
+    } finally { toppingP = null; }
+  })();
+  return toppingP;
 }
 
 function renderHead() {
@@ -222,6 +227,10 @@ function renderHead() {
 }
 function onDuelImageError() {
   if (!$("#match").classList.contains("active")) return;
+  // Disarm both handlers immediately so a two-image 404 can't fire twice and
+  // drop a second, never-shown pair (renderHead re-arms them for the next duel).
+  cards[0].querySelector("img").onerror = null;
+  cards[1].querySelector("img").onerror = null;
   busy = true;            // block picks on the broken duel
   buffer.shift();         // drop it
   topUp().then(renderHead);
@@ -234,7 +243,7 @@ function showSpinner() {
 
 // ── a pick: optimistic advance + fire-and-forget vote ──
 function pick(side) {
-  if (busy) return;
+  if (busy || refreshing) return;
   const cur = buffer.shift();
   if (!cur) { showSpinner(); topUp().then(renderHead); return; }
   busy = true;
@@ -249,7 +258,7 @@ function pick(side) {
   });
   flushOutbox();
   topUp();
-  setTimeout(renderHead, 240);
+  pendingRender = setTimeout(renderHead, 240);
 }
 
 // ── outbox (durable, fire-and-forget; survives reload) ──
