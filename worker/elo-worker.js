@@ -370,11 +370,20 @@ export class SharedElo {
     await this.state.storage.put("meta", this.meta);
     return { ok: true, reason, v: tokenOf(this.meta), fp: this.meta.fingerprint, n: this.meta.n };
   }
-  // Batch MLE rating for a placement log, bounded + clamped to the active range.
+  // Batch MLE rating for a placement log, then REGRESS toward the active median.
+  // A placement is provisional (≈10 self-judged matchups, no other voters), so the
+  // raw MLE runs hot — a near-sweep returns the range bound and vaults a newcomer
+  // above the field. Shrink it like a chess/Glicko prelim: weight = n/(n+PRIOR),
+  // so ~10 games ≈ 0.6 toward the fit and 0.4 toward the median. Live votes then
+  // carry it the rest of the way. Bounded + clamped to the active range as before.
   fitPlacement(log) {
     const ratings = this.elo.r;
     const lo = Math.min(...ratings) - 400, hi = Math.max(...ratings) + 400;
-    let r = mleFit(log, lo, hi);
+    const fit = mleFit(log, lo, hi);
+    const anchor = median(ratings);
+    const PLACEMENT_PRIOR = 7;                          // pseudo-matchups pulling to median
+    const shrink = log.length / (log.length + PLACEMENT_PRIOR);
+    const r = anchor + shrink * (fit - anchor);
     return Math.max(Math.min(...ratings) - 50, Math.min(Math.max(...ratings) + 50, r));
   }
 
@@ -394,6 +403,7 @@ export class SharedElo {
     if (m === "GET" && path === "/admin/roster") return this.handleAdminRoster(request);
     if (m === "POST" && path === "/admin/hide") return this.handleHide(request, true);
     if (m === "POST" && path === "/admin/unhide") return this.handleHide(request, false);
+    if (m === "POST" && path === "/admin/setrating") return this.handleSetRating(request);
     if (m === "POST" && path === "/admin/migrate") return this.handleMigrate(request);
     if (m === "GET" && path === "/admin/export") return this.handleExport(request);
     if (m === "POST" && path === "/admin/restore") return this.handleRestore(request);
@@ -584,6 +594,27 @@ export class SharedElo {
       }
       const res = await this._applyRosterChange(hide ? "hide" : "unhide", { snapshot: false });
       return json({ ok: true, applied: true, n: res.n, fp: res.fp, v: res.v });
+    });
+  }
+
+  // Manual Elo override — correct a mis-placed photo (e.g. a placement that ran hot).
+  // Works on active OR hidden photos; pending ones must be placed first. Snapshots so
+  // the change is restorable, and bumps the version token so live clients reload.
+  async handleSetRating(request) {
+    const a = this.adminAuth(request); if (a.err) return a.err;
+    let body; try { body = await request.json(); } catch (e) { return json({ error: "bad json" }, 400); }
+    const fn = String(body.filename || "");
+    const elo = Number(body.elo);
+    if (!Number.isFinite(elo)) return json({ error: "elo must be a finite number" }, 400);
+    const clamped = Math.max(0, Math.min(4000, Math.round(elo)));
+    return this.state.blockConcurrencyWhile(async () => {
+      const p = this.roster.photos.find((x) => x.name === fn);
+      if (!p) return json({ error: "unknown photo" }, 404);
+      if (p.status === "pending") return json({ error: "cannot set Elo on a pending photo; place it first" }, 409);
+      const prev = Math.round(p.r);
+      p.r = clamped;
+      const res = await this._applyRosterChange("setrating", { snapshot: true });
+      return json({ ok: true, filename: fn, elo: clamped, prev, n: res.n, fp: res.fp, v: res.v });
     });
   }
 

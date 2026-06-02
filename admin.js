@@ -109,7 +109,11 @@ function renderGrid(container, rows, kind) {
     btn.className = "pill";
     btn.textContent = kind === "hidden" ? "Un-hide" : "Hide";
     btn.addEventListener("click", () => kind === "hidden" ? unhide(row.name) : hide(row.name));
-    cap.appendChild(label); cap.appendChild(btn);
+    const elo = document.createElement("button");
+    elo.className = "pill";
+    elo.textContent = "Set Elo";
+    elo.addEventListener("click", () => setRating(row.name, row.elo));
+    cap.appendChild(label); cap.appendChild(btn); cap.appendChild(elo);
     div.appendChild(img); div.appendChild(cap);
     container.appendChild(div);
   }
@@ -150,6 +154,17 @@ async function unhide(filename) {
   if (!authGuard(res)) return;
   if (res.status !== 200) { toast(data.error || "Couldn't un-hide."); return; }
   toast(data.applied ? "Un-hidden." : "Already active.");
+  loadPhotos();
+}
+async function setRating(filename, current) {
+  const input = window.prompt(`Set Elo for ${filename}\n(current ${current}). New ratings take effect live immediately.`, String(current));
+  if (input === null) return;                    // cancelled
+  const elo = Number(input.trim());
+  if (!Number.isFinite(elo)) { toast("Enter a number."); return; }
+  const { res, data } = await api("/admin/setrating", "POST", { filename, elo });
+  if (!authGuard(res)) return;
+  if (res.status !== 200) { toast(data.error || "Couldn't set Elo."); return; }
+  toast(`Elo set: ${data.prev} → ${data.elo}.`);
   loadPhotos();
 }
 async function cancelPending(filename) {
