@@ -23,6 +23,12 @@ const RESULTS_DIR = "results"; // shared-set rankings are committed as results/<
 // Auto-save endpoint (Cloudflare Worker) that commits results to the repo. The
 // write token lives only in the Worker, never in the browser.
 const WORKER_URL = "https://photo-tourney-results-worker.charlie-lambert.workers.dev/";
+// Photos added through the live-Elo admin are committed into the same set folder
+// (named add-<timestamp36>-<id6>[-hint].<ext> by elo-worker.js handleClaim). They
+// belong ONLY to the living ranking — excluding them here keeps this page's photo
+// list (and therefore every saved result's cidx mapping) stable.
+// KEEP IN SYNC with results-worker.js and build-seed.mjs.
+const LIVE_ADDED_RE = /^add-[a-z0-9]+-[a-z0-9]{6}[.-]/;
 
 const PAGE_URL = location.origin + location.pathname;        // for clean links
 const PAGE_DIR = PAGE_URL.replace(/[^/]*$/, "");             // directory of the page
@@ -624,7 +630,7 @@ async function fetchSetFilenames(set) {
   if (!res.ok) throw new Error("Couldn't load that set (network error).");
   const items = await res.json();
   return items
-    .filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name))
+    .filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name) && !LIVE_ADDED_RE.test(i.name))
     .map((i) => i.name)
     // locale pinned to "en" so this matches build-seed.mjs / elo-worker.js byte-for-byte (cidx invariant)
     .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));

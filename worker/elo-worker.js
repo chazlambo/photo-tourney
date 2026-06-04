@@ -681,6 +681,9 @@ export class SharedElo {
       if (existing) return json({ ok: true, filename: existing.name, startElo: Math.round(existing.r) });
       if (this.roster.photos.filter((p) => p.status === "active").length >= MAX_ACTIVE) return json({ error: "set is full" }, 409);
       const startElo = Math.round(median(this.elo.r));
+      // The "add-<ts36>-<id6>" prefix is LOAD-BEARING: app.js, results-worker.js and
+      // build-seed.mjs all exclude names matching it, so live-added photos never
+      // enter the full (non-live) ranking or shift its cidx mapping.
       let base = "add-" + Date.now().toString(36) + "-" + uploadId.replace(/[^a-z0-9]/gi, "").slice(0, 6).toLowerCase();
       const hint = slugForName(body.hint || "");
       if (hint) base += "-" + hint;

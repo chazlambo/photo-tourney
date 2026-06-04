@@ -44,9 +44,14 @@ const OUT_FILE = join(ROOT, "worker", "seed", "seed.js");
 // owned by the Durable Object (admin hides/adds); those edits are NOT written back
 // here. Regenerating + reseeding resets known photos to these baseline ratings.
 const IMG_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i;
+// Live-Elo admin uploads land in the same set folder but are NOT part of the
+// full ranking / seed — KEEP IN SYNC with app.js LIVE_ADDED_RE and results-worker.js.
+// (The source results were ranked against the original photos only; including the
+// add-* files would shift every cidx and fail the j.c !== N check below anyway.)
+const LIVE_ADDED_RE = /^add-[a-z0-9]+-[a-z0-9]{6}[.-]/;
 function sortNames(names) {
   return names
-    .filter((n) => IMG_RE.test(n))
+    .filter((n) => IMG_RE.test(n) && !LIVE_ADDED_RE.test(n))
     .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
 }
 

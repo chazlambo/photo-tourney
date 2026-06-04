@@ -21,6 +21,9 @@ const DEFAULTS = {
 };
 const RESULTS_DIR = "results";
 const MAX_PHOTOS = 256;
+// Live-Elo admin uploads land in the same set folder but are NOT part of the
+// full ranking — KEEP IN SYNC with app.js LIVE_ADDED_RE and build-seed.mjs.
+const LIVE_ADDED_RE = /^add-[a-z0-9]+-[a-z0-9]{6}[.-]/;
 
 function corsHeaders(origin) {
   return {
@@ -114,12 +117,14 @@ export default {
     if (setCheck.status === 404) return json({ error: "unknown set" }, 400, cors);
     if (!setCheck.ok && setCheck.status !== 200) return json({ error: "set check failed" }, 502, cors);
     // Reject submissions ranking MORE photos than the set currently has on disk
-    // (stale/resumed session). We allow count <= setSize because the living-Elo
-    // page (elo-worker) may soft-hide photos whose image files still exist in the
-    // repo, so the on-disk count can legitimately exceed a ranking's photo count.
+    // (stale/resumed session), counting only full-ranking photos (live-Elo admin
+    // uploads in the same folder are excluded, matching app.js's discovery). We
+    // allow count <= setSize because the living-Elo page (elo-worker) may
+    // soft-hide photos whose image files still exist in the repo, so the on-disk
+    // count can legitimately exceed a ranking's photo count.
     const setItems = await setCheck.json();
     const setSize = Array.isArray(setItems)
-      ? setItems.filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name)).length
+      ? setItems.filter((i) => i.type === "file" && /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(i.name) && !LIVE_ADDED_RE.test(i.name)).length
       : 0;
     if (setSize && count > setSize) {
       return json({ error: "set changed; please reload", expected: setSize, got: count }, 409, cors);
